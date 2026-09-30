@@ -24,11 +24,17 @@
   #app{position:absolute;inset:0}
   #scene{display:block;width:100%;height:100%;touch-action:none}
 
-  /* 顶部 HUD */
+  /* 顶部 HUD
+     padding 吃进 safe-area：viewport-fit=cover 下刘海/挖孔会压到状态区，
+     全面屏横屏时左右两侧也可能是刘海位，硬编码 padding 会被挡住。 */
   #hud{
     position:absolute;top:0;left:0;right:0;z-index:10;
     display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
-    padding:16px 18px;pointer-events:none;
+    padding:max(16px,env(safe-area-inset-top))
+            max(18px,env(safe-area-inset-right))
+            16px
+            max(18px,env(safe-area-inset-left));
+    pointer-events:none;
   }
   .panel{
     background:var(--glass);border:1px solid var(--stroke);border-radius:16px;
@@ -55,9 +61,18 @@
   .btn-icon svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
   .btn-icon.off{opacity:.42}
 
-  /* 遮罩层 */
+  /* 遮罩层
+     短屏（手机横屏 ≈360px 高）卡片会比视口高，必须允许纵向滚动，
+     否则卡片底部的"开始游戏"按钮直接被裁掉、点不到。
+     注意：place-items:center 在可滚动容器里会把顶部内容裁掉且无法滚回去，
+     所以居中改由 .card 的 margin:auto 负责。 */
   .overlay{
-    position:absolute;inset:0;z-index:20;display:grid;place-items:center;
+    position:absolute;inset:0;z-index:20;display:grid;
+    overflow-y:auto;overscroll-behavior:contain;
+    padding:max(14px,env(safe-area-inset-top))
+            max(14px,env(safe-area-inset-right))
+            max(14px,env(safe-area-inset-bottom))
+            max(14px,env(safe-area-inset-left));
     background:radial-gradient(120% 90% at 50% 42%, rgba(6,14,26,.58) 0%, rgba(3,6,12,.92) 62%, rgba(2,4,9,.97) 100%);
     backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);
     animation:fadeIn .3s ease both;
@@ -65,7 +80,7 @@
   .overlay.hidden{display:none}
   @keyframes fadeIn{from{opacity:0}to{opacity:1}}
   .card{
-    width:min(92vw,470px);padding:38px 34px 32px;text-align:center;position:relative;overflow:hidden;
+    width:min(92vw,470px);margin:auto;padding:38px 34px 32px;text-align:center;position:relative;overflow:hidden;
     background:linear-gradient(180deg, rgba(16,28,46,.92) 0%, rgba(8,15,27,.95) 100%);
     border:1px solid rgba(67,232,255,.24);border-radius:26px;
     box-shadow:0 34px 80px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.07);
@@ -113,31 +128,86 @@
   }
   .tip{font-size:11.5px;color:var(--muted);margin-top:14px;letter-spacing:.05em}
 
-  /* 移动端方向键 */
-  #dpad{position:absolute;z-index:15;right:20px;bottom:24px;display:none;gap:8px;grid-template-columns:repeat(3,52px);grid-template-rows:repeat(3,52px)}
+  /* 键盘说明 vs 触摸说明
+     手机上没有键盘，WASD/空格/R/Enter 那套说明纯属噪音；
+     body.touch 由 isTouchMode() 在启动时挂上，按设备能力二选一显示。 */
+  .key.touch-only,.tip.touch-only{display:none}
+  body.touch .key.touch-only,body.touch .tip.touch-only{display:block}
+  body.touch .key.touch-only{display:flex}
+  body.touch .kb-only{display:none}
+
+  /* 移动端方向键
+     边距吃进 safe-area：全面屏底部有手势条、曲面屏右侧有弯折，贴边放会误触；
+     尺寸用 clamp 随屏宽走，小屏不挤、大屏不虚。 */
+  #dpad{--d:clamp(48px,13vw,60px);
+    position:absolute;z-index:15;
+    right:max(18px,env(safe-area-inset-right));
+    bottom:max(22px,env(safe-area-inset-bottom));
+    display:none;gap:9px;touch-action:none;
+    grid-template-columns:repeat(3,var(--d));grid-template-rows:repeat(3,var(--d))}
   #dpad.show{display:grid}
   #dpad .d{
-    display:grid;place-items:center;cursor:pointer;user-select:none;
+    display:grid;place-items:center;cursor:pointer;
+    user-select:none;-webkit-user-select:none;
     background:var(--glass);border:1px solid var(--stroke);border-radius:14px;
     backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
     color:var(--neon);font-size:19px;
+    transition:transform .08s ease,background .08s ease;
   }
-  #dpad .d:active{background:rgba(67,232,255,.22);transform:scale(.93)}
+  #dpad .d.active,#dpad .d:active{background:rgba(67,232,255,.22);transform:scale(.93)}
   #dpad .d.up{grid-area:1/2}#dpad .d.left{grid-area:2/1}#dpad .d.right{grid-area:2/3}#dpad .d.down{grid-area:3/2}
+  /* 横屏时纵向空间紧张，方向键收小一档，别糊住半个画面。
+     但下限必须守住 44px：再小手指按不准，贪吃蛇这种拼反应的游戏会直接劝退。
+     （实测 360px 高时 9vh 只有 32px，所以下限由 clamp 兜住而不是靠 vh。） */
+  @media (orientation:landscape) and (max-height:520px){
+    #dpad{--d:clamp(44px,9vh,50px);gap:7px;bottom:max(12px,env(safe-area-inset-bottom))}
+  }
 
   #flash{position:absolute;inset:0;z-index:9;background:rgba(255,84,112,.5);opacity:0;pointer-events:none;transition:opacity .45s ease}
   #flash.on{opacity:1;transition:none}
 
   #hint{position:absolute;left:50%;bottom:26px;transform:translateX(-50%);z-index:12;
     font-size:11.5px;color:rgba(143,168,196,.75);letter-spacing:.12em;pointer-events:none}
-  @media (max-width:640px){
-    #hud{padding:12px}
-    #stats{gap:13px;padding:9px 13px}
-    .stat .v{font-size:17px}.stat{min-width:44px}
+  /* 中等宽度：先收尺寸。
+     桌面尺寸的顶栏实测要约 800px 宽才放得下（800px 视口下右边界 782 + 18 留白），
+     所以阈值放到 860px 留余量 —— 667×375 这类横屏手机正落在原来 641~800 的空档里。
+     flex-wrap 是兜底：万一还放不下，宁可换行也不要横向溢出被裁掉。 */
+  @media (max-width:860px){
+    #hud{gap:8px;flex-wrap:wrap;
+      padding:max(10px,env(safe-area-inset-top))
+              max(12px,env(safe-area-inset-right))
+              10px
+              max(12px,env(safe-area-inset-left))}
+    #stats{gap:11px;padding:9px 12px}
+    .stat{min-width:40px}
+    .stat .v{font-size:16px}
+    #tools{gap:6px}
     .btn-icon{width:38px;height:38px}
+    .btn-icon svg{width:17px;height:17px}
+  }
+  /* 极窄竖屏（≤400px）：图标键再收 2px，保证顶栏挤进一行 */
+  @media (max-width:400px){
+    .stat{min-width:38px}
+    .btn-icon{width:36px;height:36px}
+  }
+  /* 竖屏手机：宽度真的不够，再收掉三格次要数据
+     （速度看手感、视角看底部提示、地图看场景本身；横屏与桌面仍完整显示） */
+  @media (max-width:640px){
+    .stat:nth-child(4),.stat:nth-child(5),.stat:nth-child(6){display:none}
     .card{padding:30px 22px 26px}
     .card h1{font-size:24px}
     #hint{display:none}
+  }
+  /* 短屏（手机横屏 ≈360px 高）：整张卡片压扁一档，配合 .overlay 的纵向滚动兜底 */
+  @media (max-height:560px){
+    .card{padding:20px 24px 18px;border-radius:20px}
+    .card .logo{font-size:30px;margin-bottom:8px}
+    .card h1{font-size:22px}
+    .card .sub{margin-bottom:14px}
+    .card .desc{margin-bottom:14px;line-height:1.6}
+    .keys{margin-top:14px;gap:7px}
+    .key{font-size:11px;padding:6px 10px}
+    .tip{margin-top:10px}
   }
 </style>
 </head>
@@ -179,13 +249,14 @@
       <p class="desc">吃掉发光能量球让自己变长，别撞到墙壁，<br/>更别咬到自己的身体。</p>
       <button class="btn-main" id="btn-start">开 始 游 戏</button>
       <div class="keys">
-        <div class="key"><b>W</b><b>A</b><b>S</b><b>D</b> 移动</div>
-        <div class="key"><b>↑↓←→</b> 移动</div>
-        <div class="key"><b>空格</b> 暂停</div>
+        <div class="key touch-only"><b>滑动</b> 屏幕 · 或点按右下方向键 移动</div>
+        <div class="key kb-only"><b>W</b><b>A</b><b>S</b><b>D</b> 移动</div>
+        <div class="key kb-only"><b>↑↓←→</b> 移动</div>
+        <div class="key kb-only"><b>空格</b> 暂停</div>
         <div class="key"><b>C</b> 跟随 / 上帝视角</div>
         <div class="key"><b>M</b> 音效</div>
         <div class="key"><b>N</b> 背景音乐</div>
-        <div class="key"><b>R</b> 重开</div>
+        <div class="key kb-only"><b>R</b> 重开</div>
       </div>
       <div class="tip">五张主题地图（沙滩 / 火山 / 山林 / 沼泽 / 大海）<br/>每次重开随机换图，背景与配乐同步切换</div>
     </div>
@@ -201,7 +272,8 @@
         <div class="box"><div class="k">最高分</div><div class="v gold" id="over-best">0</div></div>
       </div>
       <button class="btn-main" id="btn-retry">再 来 一 局</button>
-      <div class="tip">按 R 或 Enter 快速重开</div>
+      <div class="tip kb-only">按 R 或 Enter 快速重开</div>
+      <div class="tip touch-only">点「再来一局」重开</div>
     </div>
   </div>
 
@@ -211,7 +283,8 @@
       <h1>已暂停</h1>
       <div class="sub">PAUSED</div>
       <button class="btn-main" id="btn-resume">继 续 游 戏</button>
-      <div class="tip">再次按空格继续</div>
+      <div class="tip kb-only">再次按空格继续</div>
+      <div class="tip touch-only">点上面按钮，或右上角暂停键恢复</div>
     </div>
   </div>
 
@@ -2046,6 +2119,14 @@ const hintTexts = [
   '方向键 / WASD = 屏幕方向 · 空格暂停 · C 切到跟随视角'
 ];
 
+// 触摸设备没有键盘，底部提示换成触摸说法。
+// （#hint 只在窄屏隐藏，手机横屏 800×360 仍会显示，所以这里必须一起改）
+// isTouchMode 是函数声明、已提升，此处先于其定义调用是安全的。
+if (isTouchMode()) {
+  hintTexts[0] = '滑动屏幕转向前进 · 或点右下方向键 · C 切到上帝视角';
+  hintTexts[1] = '滑动 / 方向键 = 屏幕方向 · C 切到跟随视角';
+}
+
 const viewShorts = ['跟随', '上帝'];
 
 function updateHint() {
@@ -2077,38 +2158,60 @@ function toastCamera() {
   updateHint();
 }
 
-// 触摸滑动
+// 触摸滑动：够阈值就立刻响应，不等手指抬起 —— 贪吃蛇对响应延迟很敏感。
+// 一次触摸只转向一次，否则滑动途中连续转向会直接把自己撞死。
+const SWIPE_MIN = 24;
 let touchStart = null;
 canvas.addEventListener('touchstart', (e) => {
   const t0 = e.changedTouches[0];
-  touchStart = { x: t0.clientX, y: t0.clientY, time: Date.now() };
+  touchStart = { x: t0.clientX, y: t0.clientY, fired: false };
 }, { passive: true });
 
-canvas.addEventListener('touchend', (e) => {
-  if (!touchStart) return;
+canvas.addEventListener('touchmove', (e) => {
+  if (!touchStart || touchStart.fired) return;
   const t1 = e.changedTouches[0];
   const dx = t1.clientX - touchStart.x;
   const dy = t1.clientY - touchStart.y;
   const adx = Math.abs(dx), ady = Math.abs(dy);
-  if (Math.max(adx, ady) > 26) {
-    if (adx > ady) setDir(dx > 0 ? 'right' : 'left');
-    else setDir(dy > 0 ? 'down' : 'up');
-  }
-  touchStart = null;
+  if (Math.max(adx, ady) < SWIPE_MIN) return;
+  if (adx > ady) setDir(dx > 0 ? 'right' : 'left');
+  else setDir(dy > 0 ? 'down' : 'up');
+  touchStart.fired = true;
 }, { passive: true });
 
+for (const ev of ['touchend', 'touchcancel']) {
+  canvas.addEventListener(ev, () => { touchStart = null; }, { passive: true });
+}
+
+// 方向键：统一走指针事件，避免 touchstart + mousedown 在真机上双触发
+const dpadEl = document.getElementById('dpad');
 document.querySelectorAll('#dpad .d').forEach((el) => {
-  const fire = (ev) => {
+  el.addEventListener('pointerdown', (ev) => {
     ev.preventDefault();
+    el.classList.add('active');
     if (state === 'playing') setDir(el.dataset.dir);
     else if (state === 'ready') startGame();
-  };
-  el.addEventListener('touchstart', fire, { passive: false });
-  el.addEventListener('mousedown', fire);
+  });
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) {
+    el.addEventListener(ev, () => el.classList.remove('active'));
+  }
+  el.addEventListener('contextmenu', (ev) => ev.preventDefault());
 });
 
-if (window.matchMedia('(pointer: coarse)').matches) {
-  document.getElementById('dpad').classList.add('show');
+// 方向键显示判定：触摸能力 / 粗指针 / 无悬停，任一成立即显示。
+// 支持 URL 覆盖：?touch=1 强制显示、?touch=0 强制隐藏（桌面调移动端布局时用）。
+function isTouchMode() {
+  const q = new URLSearchParams(location.search).get('touch');
+  if (q === '1') return true;
+  if (q === '0') return false;
+  return (navigator.maxTouchPoints || 0) > 0
+      || window.matchMedia('(pointer: coarse)').matches
+      || window.matchMedia('(hover: none)').matches;
+}
+if (isTouchMode()) {
+  dpadEl.classList.add('show');
+  // 给 CSS 一个钩子，让「键盘说明」与「触摸说明」按设备二选一
+  document.body.classList.add('touch');
 }
 
 /* ============================================================
