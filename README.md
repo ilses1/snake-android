@@ -72,7 +72,9 @@ snake-android/
 ├── gradle/wrapper/                      # Gradle 8.9 wrapper
 ├── tools/
 │   ├── make-icons.py                    # 从主仓库源图标生成全套安卓图标
-│   └── sync-web.mjs                     # 同步游戏页面 + 注入桥接
+│   ├── sync-web.mjs                     # 同步游戏页面 + 注入桥接
+│   └── check-web-assets.mjs             # 打包前 assets 自检（CI 也跑）
+├── .github/workflows/android.yml        # CI：构建 debug APK，打 tag 时发 Release
 ├── build.gradle.kts
 ├── settings.gradle.kts                  # 阿里云镜像优先，回落官方源
 └── gradle.properties
@@ -97,15 +99,31 @@ node tools/sync-web.mjs
 # 2) 生成图标（需要主仓库的 tauri-app/icon.png）
 python tools/make-icons.py
 
-# 3) 编译 debug APK
+# 3) 自检 assets：离线依赖、桥接补丁、内联脚本语法
+node tools/check-web-assets.mjs
+# 本机若报「无法启动子进程（EBUSY）」，改用：
+#   node --experimental-vm-modules tools/check-web-assets.mjs
+
+# 4) 编译 debug APK
 ./gradlew :app:assembleDebug
 # 产物：app/build/outputs/apk/debug/app-debug.apk
 
-# 4) 装到设备
+# 5) 装到设备
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
 调试时用桌面 Chrome 打开 `chrome://inspect` 可直接远程调试 WebView（debug 版已开启 `setWebContentsDebuggingEnabled`）。
+
+## CI
+
+`.github/workflows/android.yml`：
+
+| 触发 | 行为 |
+| --- | --- |
+| push 到 `main` / PR / 手动 | 校验 assets → 构建 debug APK → 上传 artifact（保留 30 天） |
+| push `v*` tag | 同上，并自动创建 Release 附上 APK |
+
+构建前会跑 `tools/check-web-assets.mjs`，能拦住三类常见事故：忘记跑 `sync-web.mjs`（assets 缺失）、桥接被叠加注入（标记出现多次）、内联脚本被改出语法错误。
 
 ### 本机环境（Windows，全部装在 D 盘）
 

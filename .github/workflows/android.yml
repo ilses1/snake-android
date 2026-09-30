@@ -1,0 +1,89 @@
+name: Android
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+# 发 Release 需要写权限
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: 构建 debug APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: 安装 Node（assets 自检用）
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 安装 Android 命令行工具
+        uses: android-actions/setup-android@v3
+
+      - name: 安装 SDK 组件并接受许可
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "build-tools;34.0.0"
+          # android-35 平台包自身依赖 build-tools;34.0.0，所以两个版本都装
+
+      - name: 缓存 Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts', '**/*.gradle', '**/gradle-wrapper.properties', 'gradle.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: 校验 assets（离线依赖 / 桥接补丁 / 语法）
+        run: node tools/check-web-assets.mjs
+
+      - name: 构建 debug APK
+        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+
+      - name: 整理产物
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk \
+             "dist/snake-android-${GITHUB_REF_NAME}-debug.apk"
+          ls -la dist/
+
+      - name: 上传 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: snake-android-debug
+          path: dist/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: 附到 Release（仅打 tag 时）
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.apk
+          generate_release_notes: true
+          fail_on_unmatched_files: true
