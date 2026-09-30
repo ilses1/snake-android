@@ -35,6 +35,10 @@ const problems = [];
 const ok = (msg) => console.log('  ok    ' + msg);
 const bad = (msg) => { problems.push(msg); console.log('  FAIL  ' + msg); };
 
+// 「没能检查」与「检查出来是错的」是两回事，别混在同一个报错里误导人。
+// 校验函数返回的错误串带此前缀即表示环境问题（而非被检查的代码有问题）。
+const ENV_PREFIX = '\u0000ENV\u0000';
+
 /** 用 vm.SourceTextModule 解析一段 ESM 源码；返回 null 表示通过，否则返回错误描述。 */
 function parseEsm(source, filename) {
   const M = vm.SourceTextModule;
@@ -58,7 +62,7 @@ function checkViaChild(source, filename) {
     const r = spawnSync(process.execPath, ['--check', f], { encoding: 'utf8' });
     if (r.status === 0) return null;
     if (r.error) {
-      return `无法启动子进程（${r.error.code}）。` +
+      return ENV_PREFIX + `无法启动子进程（${r.error.code}）。` +
         '本机请改用：node --experimental-vm-modules tools/check-web-assets.mjs';
     }
     const detail = [r.stdout, r.stderr].filter(Boolean).join('\n').trim();
@@ -110,8 +114,14 @@ function main() {
   scripts.forEach((body, i) => {
     const label = `内联脚本 #${i + 1}（${body.length} 字符）`;
     const err = useVm ? parseEsm(body, `inline_${i + 1}.mjs`) : checkViaChild(body, `inline_${i + 1}.mjs`);
-    if (err) bad(`${label} 语法错误：${err}`);
-    else ok(`${label} 语法通过`);
+    if (err && err.startsWith(ENV_PREFIX)) {
+      // 环境问题：代码本身没被验证过，既不能报通过也不能报语法错误
+      bad(`${label} 未能检查（环境限制，非代码问题）：${err.slice(ENV_PREFIX.length)}`);
+    } else if (err) {
+      bad(`${label} 语法错误：${err}`);
+    } else {
+      ok(`${label} 语法通过`);
+    }
   });
 }
 

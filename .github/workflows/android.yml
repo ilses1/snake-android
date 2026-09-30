@@ -83,7 +83,9 @@ jobs:
             gradle-${{ runner.os }}-
 
       - name: 校验 assets（离线依赖 / 桥接补丁 / 语法）
-        run: node tools/check-web-assets.mjs
+        # 带 --experimental-vm-modules：让语法检查走进程内的 vm.SourceTextModule，
+        # 与本地一致（不带标志时会回落到 node --check 子进程，Windows 上还会 EBUSY）。
+        run: node --experimental-vm-modules tools/check-web-assets.mjs
 
       - name: 构建 debug APK
         run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
