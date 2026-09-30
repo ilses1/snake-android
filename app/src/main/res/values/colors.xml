@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 自适应图标背景色，由 tools/make-icons.py 从源图标边缘四角 16x16 采样得出 -->
+    <color name="ic_launcher_background">#07101F</color>
+</resources>

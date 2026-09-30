@@ -27,5 +27,9 @@ keystore.properties
 Thumbs.db
 .vscode/
 
+# Python 工具脚本缓存
+__pycache__/
+*.pyc
+
 # 日志
 *.log

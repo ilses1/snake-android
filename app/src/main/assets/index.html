@@ -1,0 +1,2245 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>3D 贪吃蛇 · Snake 3D</title>
+<style>
+  :root{
+    --bg:#05080f;
+    --neon:#43e8ff;
+    --neon2:#7cf86b;
+    --food:#ffb648;
+    --danger:#ff5470;
+    --glass:rgba(12,22,38,.72);
+    --stroke:rgba(120,200,255,.18);
+    --text:#e8f4ff;
+    --muted:#8fa8c4;
+    --font: "PingFang SC","Microsoft YaHei","HarmonyOS Sans SC",system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--font);color:var(--text)}
+  body{position:fixed;inset:0}
+
+  #app{position:absolute;inset:0}
+  #scene{display:block;width:100%;height:100%;touch-action:none}
+
+  /* 顶部 HUD */
+  #hud{
+    position:absolute;top:0;left:0;right:0;z-index:10;
+    display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+    padding:16px 18px;pointer-events:none;
+  }
+  .panel{
+    background:var(--glass);border:1px solid var(--stroke);border-radius:16px;
+    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    box-shadow:0 10px 34px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.05);
+  }
+  #stats{display:flex;gap:18px;padding:11px 18px;pointer-events:auto}
+  .stat{display:flex;flex-direction:column;gap:3px;min-width:56px}
+  .stat .k{font-size:10px;letter-spacing:.16em;color:var(--muted);font-weight:600}
+  .stat .v{font-size:21px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:.02em}
+  .stat .v.cyan{color:var(--neon);text-shadow:0 0 18px rgba(67,232,255,.5)}
+  .stat .v.gold{color:var(--food);text-shadow:0 0 18px rgba(255,182,72,.42)}
+  .stat .v.green{color:var(--neon2);text-shadow:0 0 18px rgba(124,248,107,.42)}
+
+  #tools{display:flex;gap:8px;pointer-events:auto}
+  .btn-icon{
+    width:42px;height:42px;display:grid;place-items:center;cursor:pointer;
+    background:var(--glass);border:1px solid var(--stroke);border-radius:13px;
+    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    color:var(--text);transition:transform .16s ease,border-color .16s ease,background .16s ease;
+  }
+  .btn-icon:hover{transform:translateY(-2px);border-color:rgba(67,232,255,.55);background:rgba(20,40,64,.8)}
+  .btn-icon:active{transform:translateY(0) scale(.95)}
+  .btn-icon svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+  .btn-icon.off{opacity:.42}
+
+  /* 遮罩层 */
+  .overlay{
+    position:absolute;inset:0;z-index:20;display:grid;place-items:center;
+    background:radial-gradient(120% 90% at 50% 42%, rgba(6,14,26,.58) 0%, rgba(3,6,12,.92) 62%, rgba(2,4,9,.97) 100%);
+    backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);
+    animation:fadeIn .3s ease both;
+  }
+  .overlay.hidden{display:none}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  .card{
+    width:min(92vw,470px);padding:38px 34px 32px;text-align:center;position:relative;overflow:hidden;
+    background:linear-gradient(180deg, rgba(16,28,46,.92) 0%, rgba(8,15,27,.95) 100%);
+    border:1px solid rgba(67,232,255,.24);border-radius:26px;
+    box-shadow:0 34px 80px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.07);
+    animation:pop .38s cubic-bezier(.2,1.3,.45,1) both;
+  }
+  @keyframes pop{from{opacity:0;transform:translateY(16px) scale(.94)}to{opacity:1;transform:none}}
+  .card::before{
+    content:'';position:absolute;top:-60%;left:-20%;width:140%;height:120%;
+    background:radial-gradient(circle at 50% 50%, rgba(67,232,255,.14), transparent 62%);
+    pointer-events:none;
+  }
+  .card .logo{font-size:44px;line-height:1;margin-bottom:14px;filter:drop-shadow(0 0 22px rgba(67,232,255,.65))}
+  .card h1{
+    font-size:29px;font-weight:900;letter-spacing:.05em;margin-bottom:9px;
+    background:linear-gradient(100deg,#8ff2ff,#43e8ff 42%,#7cf86b);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .card .sub{font-size:12.5px;color:var(--muted);letter-spacing:.13em;margin-bottom:24px;text-transform:uppercase}
+  .card .desc{font-size:13.5px;color:#a9c2dc;line-height:1.85;margin-bottom:22px}
+  .result{display:flex;gap:12px;justify-content:center;margin:22px 0 26px}
+  .result .box{flex:1;padding:14px 10px;border-radius:15px;background:rgba(67,232,255,.06);border:1px solid rgba(67,232,255,.16)}
+  .result .box .k{font-size:10px;letter-spacing:.16em;color:var(--muted);margin-bottom:7px;font-weight:600}
+  .result .box .v{font-size:26px;font-weight:900;font-variant-numeric:tabular-nums}
+
+  .btn-main{
+    width:100%;padding:15px 22px;cursor:pointer;border:none;border-radius:15px;
+    font-family:var(--font);font-size:15.5px;font-weight:800;letter-spacing:.09em;color:#04121c;
+    background:linear-gradient(100deg,#5ef0ff,#43e8ff 40%,#7cf86b);
+    box-shadow:0 12px 34px rgba(67,232,255,.34);
+    transition:transform .16s ease,box-shadow .16s ease,filter .16s ease;
+  }
+  .btn-main:hover{transform:translateY(-2px);box-shadow:0 18px 42px rgba(67,232,255,.46);filter:brightness(1.06)}
+  .btn-main:active{transform:translateY(0) scale(.98)}
+
+  .keys{margin-top:24px;display:flex;flex-wrap:wrap;gap:9px;justify-content:center}
+  .key{
+    display:flex;align-items:center;gap:7px;font-size:11.5px;color:#9fb8d2;
+    background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.09);
+    padding:7px 12px;border-radius:10px;
+  }
+  .key b{
+    display:inline-block;min-width:19px;padding:2px 6px;border-radius:6px;font-size:10.5px;
+    background:rgba(67,232,255,.15);color:#8ff2ff;border:1px solid rgba(67,232,255,.28);
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+  }
+  .tip{font-size:11.5px;color:var(--muted);margin-top:14px;letter-spacing:.05em}
+
+  /* 移动端方向键 */
+  #dpad{position:absolute;z-index:15;right:20px;bottom:24px;display:none;gap:8px;grid-template-columns:repeat(3,52px);grid-template-rows:repeat(3,52px)}
+  #dpad.show{display:grid}
+  #dpad .d{
+    display:grid;place-items:center;cursor:pointer;user-select:none;
+    background:var(--glass);border:1px solid var(--stroke);border-radius:14px;
+    backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    color:var(--neon);font-size:19px;
+  }
+  #dpad .d:active{background:rgba(67,232,255,.22);transform:scale(.93)}
+  #dpad .d.up{grid-area:1/2}#dpad .d.left{grid-area:2/1}#dpad .d.right{grid-area:2/3}#dpad .d.down{grid-area:3/2}
+
+  #flash{position:absolute;inset:0;z-index:9;background:rgba(255,84,112,.5);opacity:0;pointer-events:none;transition:opacity .45s ease}
+  #flash.on{opacity:1;transition:none}
+
+  #hint{position:absolute;left:50%;bottom:26px;transform:translateX(-50%);z-index:12;
+    font-size:11.5px;color:rgba(143,168,196,.75);letter-spacing:.12em;pointer-events:none}
+  @media (max-width:640px){
+    #hud{padding:12px}
+    #stats{gap:13px;padding:9px 13px}
+    .stat .v{font-size:17px}.stat{min-width:44px}
+    .btn-icon{width:38px;height:38px}
+    .card{padding:30px 22px 26px}
+    .card h1{font-size:24px}
+    #hint{display:none}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="scene"></canvas>
+  <div id="flash"></div>
+
+  <header id="hud">
+    <div id="stats" class="panel">
+      <div class="stat"><span class="k">分数</span><span class="v cyan" id="ui-score">0</span></div>
+      <div class="stat"><span class="k">最高分</span><span class="v gold" id="ui-best">0</span></div>
+      <div class="stat"><span class="k">长度</span><span class="v green" id="ui-len">4</span></div>
+      <div class="stat"><span class="k">速度</span><span class="v" id="ui-lv">1</span></div>
+      <div class="stat"><span class="k">视角</span><span class="v" id="ui-view">上帝</span></div>
+      <div class="stat"><span class="k">地图</span><span class="v" id="ui-map">🌲 山林</span></div>
+    </div>
+    <div id="tools">
+      <button class="btn-icon" id="btn-view" title="切换视角 (C)">
+        <svg viewBox="0 0 24 24"><path d="M12 3l8 4.6v8.8L12 21l-8-4.6V7.6z"/><path d="M12 12l8-4.6M12 12v9M12 12L4 7.4"/></svg>
+      </button>
+      <button class="btn-icon" id="btn-sound" title="音效开关 (M)">
+        <svg viewBox="0 0 24 24"><path d="M11 5L6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 010 7"/></svg>
+      </button>
+      <button class="btn-icon" id="btn-music" title="背景音乐开关 (N)">
+        <svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.6"/><circle cx="17.5" cy="16" r="2.6"/></svg>
+      </button>
+      <button class="btn-icon" id="btn-pause" title="暂停 (空格)">
+        <svg viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="overlay" id="ov-start">
+    <div class="card">
+      <div class="logo">🐍</div>
+      <h1>3D 贪吃蛇</h1>
+      <div class="sub">Snake · Dimension 3</div>
+      <p class="desc">吃掉发光能量球让自己变长，别撞到墙壁，<br/>更别咬到自己的身体。</p>
+      <button class="btn-main" id="btn-start">开 始 游 戏</button>
+      <div class="keys">
+        <div class="key"><b>W</b><b>A</b><b>S</b><b>D</b> 移动</div>
+        <div class="key"><b>↑↓←→</b> 移动</div>
+        <div class="key"><b>空格</b> 暂停</div>
+        <div class="key"><b>C</b> 跟随 / 上帝视角</div>
+        <div class="key"><b>M</b> 音效</div>
+        <div class="key"><b>N</b> 背景音乐</div>
+        <div class="key"><b>R</b> 重开</div>
+      </div>
+      <div class="tip">五张主题地图（沙滩 / 火山 / 山林 / 沼泽 / 大海）<br/>每次重开随机换图，背景与配乐同步切换</div>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="ov-over">
+    <div class="card">
+      <div class="logo" id="over-emoji">💥</div>
+      <h1 id="over-title">游戏结束</h1>
+      <div class="sub" id="over-reason">CRASHED</div>
+      <div class="result">
+        <div class="box"><div class="k">本局分数</div><div class="v cyan" id="over-score">0</div></div>
+        <div class="box"><div class="k">最高分</div><div class="v gold" id="over-best">0</div></div>
+      </div>
+      <button class="btn-main" id="btn-retry">再 来 一 局</button>
+      <div class="tip">按 R 或 Enter 快速重开</div>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="ov-pause">
+    <div class="card">
+      <div class="logo">⏸</div>
+      <h1>已暂停</h1>
+      <div class="sub">PAUSED</div>
+      <button class="btn-main" id="btn-resume">继 续 游 戏</button>
+      <div class="tip">再次按空格继续</div>
+    </div>
+  </div>
+
+  <div id="dpad">
+    <div class="d up" data-dir="up">▲</div>
+    <div class="d left" data-dir="left">◀</div>
+    <div class="d right" data-dir="right">▶</div>
+    <div class="d down" data-dir="down">▼</div>
+  </div>
+
+  <div id="hint">方向键 / WASD 控制方向 · 空格暂停 · C 切换视角</div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "./three.module.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+/* ============================================================
+   3D 贪吃蛇 — 核心逻辑
+   ============================================================ */
+
+const GRID = 20;          // 棋盘 20 x 20 格
+const CELL = 1;           // 每格世界单位
+const HALF = GRID / 2;
+const START_INTERVAL = 0.175;   // 初始每步耗时（秒）
+const MIN_INTERVAL   = 0.072;   // 最快每步耗时
+const SPED_UP        = 0.0045;  // 每吃一个提速
+
+const DIRS = {
+  up:    { x: 0,  z: -1 },
+  down:  { x: 0,  z: 1  },
+  left:  { x: -1, z: 0  },
+  right: { x: 1,  z: 0  }
+};
+
+/* ---------- DOM ---------- */
+const $ = (id) => document.getElementById(id);
+const canvas   = $('scene');
+const uiScore  = $('ui-score');
+const uiBest   = $('ui-best');
+const uiLen    = $('ui-len');
+const uiLv     = $('ui-lv');
+const ovStart  = $('ov-start');
+const ovOver   = $('ov-over');
+const ovPause  = $('ov-pause');
+const flashEl  = $('flash');
+
+/* ---------- 状态 ---------- */
+let state = 'ready';          // ready | playing | paused | over
+let snake = [];
+let dir = DIRS.right;
+let pendingDir = null;
+let food = { gx: 0, gz: 0, mesh: null, light: null };
+let acc = 0;
+let stepInterval = START_INTERVAL;
+let score = 0;
+let speedLevel = 1;
+let best = Number(localStorage.getItem('snake3d_best') || 0);
+let soundOn = localStorage.getItem('snake3d_sound') !== '0';
+let camMode = 1;              // 0 跟随视角 1 上帝视角（默认）
+let deathShake = 0;
+
+/* ============================================================
+   渲染器 / 场景 / 相机
+   ============================================================ */
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.08;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x05080f);
+scene.fog = new THREE.Fog(0x05080f, 26, 62);
+
+const camera = new THREE.PerspectiveCamera(52, window.innerWidth / window.innerHeight, 0.1, 300);
+camera.position.set(0, 20, 20);
+
+/* ---------- 灯光 ---------- */
+const hemiLight = new THREE.HemisphereLight(0x8fd8ff, 0x101c2c, 1.05);
+scene.add(hemiLight);
+
+const keyLight = new THREE.DirectionalLight(0xbfe9ff, 1.55);
+keyLight.position.set(14, 26, 12);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.set(2048, 2048);
+keyLight.shadow.camera.near = 2;
+keyLight.shadow.camera.far = 70;
+keyLight.shadow.camera.left = -16;
+keyLight.shadow.camera.right = 16;
+keyLight.shadow.camera.top = 16;
+keyLight.shadow.camera.bottom = -16;
+keyLight.shadow.bias = -0.0009;
+keyLight.shadow.radius = 3;
+scene.add(keyLight);
+
+const rimLight = new THREE.DirectionalLight(0x4affc8, 0.5);
+rimLight.position.set(-16, 10, -14);
+scene.add(rimLight);
+
+const glowLight = new THREE.PointLight(0x43e8ff, 1.5, 22, 2);
+glowLight.position.set(0, 5, 0);
+scene.add(glowLight);
+
+/* ============================================================
+   棋盘
+   ============================================================ */
+function makeFloorTexture(t) {
+  const S = 1024, n = GRID;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const ctx = c.getContext('2d');
+  const cell = S / n;
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      ctx.fillStyle = (i + j) % 2 ? t.floor.a : t.floor.b;
+      ctx.fillRect(i * cell, j * cell, cell, cell);
+    }
+  }
+  // 颗粒感（沙粒 / 岩屑 / 苔藓 / 淤泥）
+  if (t.floor.grain) {
+    for (let k = 0; k < 3000; k++) {
+      const r = Math.random();
+      ctx.fillStyle = (r < 0.5 ? 'rgba(255,255,255,' : 'rgba(0,0,0,') + (0.02 + Math.random() * 0.06).toFixed(3) + ')';
+      const s = 1 + Math.random() * 3.4;
+      ctx.fillRect(Math.random() * S, Math.random() * S, s, s);
+    }
+  }
+  ctx.strokeStyle = t.floor.line;
+  ctx.lineWidth = 1.6;
+  for (let i = 0; i <= n; i++) {
+    ctx.beginPath(); ctx.moveTo(i * cell, 0); ctx.lineTo(i * cell, S); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, i * cell); ctx.lineTo(S, i * cell); ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  return tex;
+}
+
+// 水面 / 岩浆面贴图：软斑块，配合 UV 缓慢滚动模拟流动
+function makeSurfaceTexture(t) {
+  const S = 512;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = t.surface.base;
+  ctx.fillRect(0, 0, S, S);
+  for (let k = 0; k < 110; k++) {
+    const x = Math.random() * S, y = Math.random() * S, r = 12 + Math.random() * 54;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, t.surface.hiA);
+    g.addColorStop(1, t.surface.hiB);
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(3, 3);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+const boardGroup = new THREE.Group();
+scene.add(boardGroup);
+
+const floorMat = new THREE.MeshStandardMaterial({
+  roughness: 0.72,
+  metalness: 0.22
+});
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(GRID * CELL, GRID * CELL), floorMat);
+floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true;
+boardGroup.add(floor);
+
+// 发光底座（边缘光带）
+const baseGeo = new THREE.BoxGeometry(GRID * CELL + 0.9, 0.55, GRID * CELL + 0.9);
+const baseMat = new THREE.MeshStandardMaterial({
+  color: 0x071320, roughness: 0.5, metalness: 0.7,
+  emissive: 0x0d3a52, emissiveIntensity: 0.8
+});
+const base = new THREE.Mesh(baseGeo, baseMat);
+base.position.y = -0.29;
+base.receiveShadow = true;
+boardGroup.add(base);
+
+// 四周围墙
+const wallMat = new THREE.MeshStandardMaterial({
+  color: 0x0e2338, roughness: 0.35, metalness: 0.6,
+  transparent: true, opacity: 0.62,
+  emissive: 0x2ec8ff, emissiveIntensity: 0.62
+});
+const WALL_H = 0.85, T = 0.45;
+[[0, -HALF - T / 2, GRID + T * 2, T], [0, HALF + T / 2, GRID + T * 2, T]].forEach(([x, z, w, d]) => {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w * CELL, WALL_H, d * CELL), wallMat);
+  m.position.set(x * CELL, WALL_H / 2 - 0.05, z * CELL);
+  boardGroup.add(m);
+});
+[[-HALF - T / 2, 0], [HALF + T / 2, 0]].forEach(([x, z]) => {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(T * CELL, WALL_H, GRID * CELL + T * 2 * CELL), wallMat);
+  m.position.set(x * CELL, WALL_H / 2 - 0.05, z * CELL);
+  boardGroup.add(m);
+});
+
+// 四角光柱点缀
+const cornerMat = new THREE.MeshBasicMaterial({ color: 0x43e8ff, transparent: true, opacity: 0.5 });
+[[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sz]) => {
+  const p = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 3.4, 8), cornerMat);
+  p.position.set(sx * (HALF + 0.05), 1.7, sz * (HALF + 0.05));
+  boardGroup.add(p);
+});
+
+/* ============================================================
+   环境层：地面 / 水面（岩浆面）/ 主题道具 / 氛围粒子
+   ============================================================ */
+const GROUND_Y = -0.62;            // 地形面高度（低于底座底面 -0.565）
+const envGroup = new THREE.Group();
+scene.add(envGroup);
+
+const groundMat = new THREE.MeshStandardMaterial({ color: 0x0b1420, roughness: 0.96, metalness: 0.04 });
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(420, 420), groundMat);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = GROUND_Y;
+envGroup.add(ground);
+
+// 水面 / 岩浆面：半透明，UV 缓慢滚动
+const surfaceMat = new THREE.MeshStandardMaterial({
+  transparent: true, opacity: 0.85, roughness: 0.24, metalness: 0.35,
+  depthWrite: false
+});
+const surface = new THREE.Mesh(new THREE.PlaneGeometry(420, 420), surfaceMat);
+surface.rotation.x = -Math.PI / 2;
+surface.visible = false;
+envGroup.add(surface);
+
+const propGroup = new THREE.Group();
+envGroup.add(propGroup);
+
+let PROP_BASE = GROUND_Y;          // 道具落地高度（沼泽的树要站在水下，单独抬高）
+
+function pmat(color, rough = 0.85, metal = 0.06, emissive = 0x000000, ei = 0) {
+  return new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal, emissive, emissiveIntensity: ei, flatShading: true });
+}
+
+function addRock(g, x, z, s, mat) {
+  const m = new THREE.Mesh(new THREE.IcosahedronGeometry(s, 0), mat);
+  m.scale.set(1, 0.62 + Math.random() * 0.5, 1);
+  m.position.set(x, PROP_BASE + s * 0.42, z);
+  m.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+  m.castShadow = true;
+  g.add(m);
+}
+
+function addPine(g, x, z, h, mat, matLeaf) {
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.035 * h, 0.055 * h, h * 0.34, 6), mat);
+  trunk.position.set(x, PROP_BASE + h * 0.17, z);
+  trunk.castShadow = true;
+  g.add(trunk);
+  for (let i = 0; i < 3; i++) {
+    const k = 1 - i * 0.28;
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.24 * h * k, h * 0.42, 7), matLeaf);
+    cone.position.set(x, PROP_BASE + h * (0.30 + i * 0.22), z);
+    cone.castShadow = true;
+    g.add(cone);
+  }
+}
+
+function addPalm(g, x, z, h) {
+  const bark = pmat(0x6a4a2c, 0.9);
+  const leaf = pmat(0x2f9d55, 0.72, 0.05, 0x0d3a1c, 0.28);
+  const bend = (Math.random() - 0.5) * 0.8;
+  for (let i = 0; i < 3; i++) {
+    const seg = new THREE.Mesh(new THREE.CylinderGeometry(0.10 * (1 - i * 0.1), 0.14 * (1 - i * 0.08), h * 0.36, 7), bark);
+    seg.position.set(x + bend * i * 0.4, PROP_BASE + h * (0.18 + i * 0.34), z);
+    seg.rotation.z = -bend * 0.3;
+    seg.castShadow = true;
+    g.add(seg);
+  }
+  const tx = x + bend, ty = PROP_BASE + h * 1.04, tz = z;
+  const fl = h * 0.62;
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * Math.PI * 2 + Math.random() * 0.35;
+    const droop = 0.26 + Math.random() * 0.42;
+    const frond = new THREE.Mesh(new THREE.BoxGeometry(fl, 0.045, 0.5), leaf);
+    frond.rotation.set(0, -a, droop);
+    frond.position.set(
+      tx + Math.cos(a) * Math.cos(droop) * fl * 0.5,
+      ty + Math.sin(droop) * fl * 0.5,
+      tz + Math.sin(a) * Math.cos(droop) * fl * 0.5
+    );
+    frond.castShadow = true;
+    g.add(frond);
+  }
+  const coconut = pmat(0x4a3320, 0.9);
+  for (let i = 0; i < 3; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const nut = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 6), coconut);
+    nut.position.set(tx + Math.cos(a) * 0.2, ty - 0.13, tz + Math.sin(a) * 0.2);
+    g.add(nut);
+  }
+}
+
+function addDeadTree(g, x, z, h, mat) {
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.13, h, 6), mat);
+  trunk.position.set(x, PROP_BASE + h * 0.5, z);
+  trunk.rotation.z = (Math.random() - 0.5) * 0.26;
+  trunk.castShadow = true;
+  g.add(trunk);
+  const nb = 3 + ((Math.random() * 3) | 0);
+  for (let i = 0; i < nb; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const bl = h * (0.3 + Math.random() * 0.4);
+    const br = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.06, bl, 5), mat);
+    const by = PROP_BASE + h * (0.5 + Math.random() * 0.42);
+    br.position.set(x + Math.cos(a) * bl * 0.32, by + bl * 0.18, z + Math.sin(a) * bl * 0.32);
+    br.rotation.set(0, -a, -(0.7 + Math.random() * 0.5));
+    br.castShadow = true;
+    g.add(br);
+  }
+}
+
+function addCoral(g, x, z, h, mat, matTip) {
+  const n = 3 + ((Math.random() * 3) | 0);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + Math.random();
+    const ch = h * (0.5 + Math.random() * 0.6);
+    const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.17, ch, 6), mat);
+    stalk.position.set(x + Math.cos(a) * h * 0.16, PROP_BASE + ch * 0.5, z + Math.sin(a) * h * 0.16);
+    stalk.rotation.set(Math.cos(a) * 0.24, 0, -Math.sin(a) * 0.24);
+    stalk.castShadow = true;
+    g.add(stalk);
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), matTip);
+    tip.position.set(stalk.position.x, PROP_BASE + ch, stalk.position.z);
+    g.add(tip);
+  }
+}
+
+function addShard(g, x, z, h, mat) {
+  const m = new THREE.Mesh(new THREE.ConeGeometry(h * 0.2, h, 5), mat);
+  m.position.set(x, PROP_BASE + h * 0.42, z);
+  m.rotation.set((Math.random() - 0.5) * 0.5, Math.random() * 3, (Math.random() - 0.5) * 0.5);
+  m.scale.set(1, 1, 0.6);
+  m.castShadow = true;
+  g.add(m);
+}
+
+/** 围绕棋盘撒点：环形分布，半径 [r0, r1)，避开棋盘 */
+function scatter(g, count, r0, r1, fn) {
+  for (let i = 0; i < count; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const r = r0 + Math.random() * (r1 - r0);
+    fn(g, Math.cos(a) * r, Math.sin(a) * r, i);
+  }
+}
+
+/* ---------- 氛围粒子（尘埃 / 火星 / 落叶 / 气泡 / 水汽） ---------- */
+const AMB = 300;
+const ambPos = new Float32Array(AMB * 3);
+const ambVel = new Float32Array(AMB * 3);
+const ambCol = new Float32Array(AMB * 3);
+let ambGeo = null, ambPts = null, ambCfg = null;
+
+function initAmbient() {
+  for (let i = 0; i < AMB; i++) {
+    ambPos[i * 3] = (Math.random() - 0.5) * 80;
+    ambPos[i * 3 + 1] = Math.random() * 16;
+    ambPos[i * 3 + 2] = (Math.random() - 0.5) * 80;
+  }
+  ambGeo = new THREE.BufferGeometry();
+  ambGeo.setAttribute('position', new THREE.BufferAttribute(ambPos, 3).setUsage(THREE.DynamicDrawUsage));
+  ambGeo.setAttribute('color', new THREE.BufferAttribute(ambCol, 3).setUsage(THREE.DynamicDrawUsage));
+  const s = 64, c = document.createElement('canvas');
+  c.width = c.height = s;
+  const cx = c.getContext('2d');
+  const grd = cx.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+  grd.addColorStop(0, 'rgba(255,255,255,1)');
+  grd.addColorStop(0.4, 'rgba(255,255,255,.6)');
+  grd.addColorStop(1, 'rgba(255,255,255,0)');
+  cx.fillStyle = grd;
+  cx.fillRect(0, 0, s, s);
+  ambPts = new THREE.Points(ambGeo, new THREE.PointsMaterial({
+    size: 0.3, vertexColors: true, map: new THREE.CanvasTexture(c),
+    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true,
+    opacity: 0.9
+  }));
+  ambPts.frustumCulled = false;
+  scene.add(ambPts);
+}
+initAmbient();
+
+function setAmbient(cfg) {
+  ambCfg = cfg;
+  const col = new THREE.Color(cfg.color);
+  for (let i = 0; i < AMB; i++) {
+    const j = Math.random();
+    const k = 0.55 + j * 0.75;
+    ambCol[i * 3] = col.r * k; ambCol[i * 3 + 1] = col.g * k; ambCol[i * 3 + 2] = col.b * k;
+  }
+  ambGeo.attributes.color.needsUpdate = true;
+  ambPts.material.size = cfg.size;
+  ambPts.material.opacity = cfg.opacity;
+}
+
+function updateAmbient(dt) {
+  if (!ambCfg) return;
+  const rise = ambCfg.rise, drift = ambCfg.drift;
+  for (let i = 0; i < AMB; i++) {
+    const i3 = i * 3;
+    ambPos[i3]     += Math.sin((performance.now() / 2400) + i) * drift * dt + ambVel[i3] * dt;
+    ambPos[i3 + 1] += rise * dt;
+    ambPos[i3 + 2] += Math.cos((performance.now() / 2600) + i * 1.7) * drift * dt + ambVel[i3 + 2] * dt;
+    if (ambPos[i3 + 1] > 17) { ambPos[i3 + 1] = -0.4; }
+    if (ambPos[i3 + 1] < -0.3) { ambPos[i3 + 1] = 17; }
+    if (ambPos[i3] < -42) ambPos[i3] = 42; else if (ambPos[i3] > 42) ambPos[i3] = -42;
+    if (ambPos[i3 + 2] < -42) ambPos[i3 + 2] = 42; else if (ambPos[i3 + 2] > 42) ambPos[i3 + 2] = -42;
+  }
+  ambGeo.attributes.position.needsUpdate = true;
+}
+
+/* ============================================================
+   坐标换算
+   ============================================================ */
+function cellX(gx) { return (gx + 0.5 - HALF) * CELL; }
+function cellZ(gz) { return (gz + 0.5 - HALF) * CELL; }
+
+/* ============================================================
+   蛇
+   ============================================================ */
+const snakeGroup = new THREE.Group();
+scene.add(snakeGroup);
+
+/* 造型参数 ---------------------------------------------------- */
+const BODY_SEGS   = 16;                  // 横截面分段数
+const MAX_RINGS   = 640;                 // 身体环数上限
+const SAMPLE_STEP = 0.30;                // 期望环间距（世界单位）
+const CORNER_R    = 0.36;                // 拐角圆角半径
+const CORNER_SEG  = 8;                   // 拐角采样段数
+const NECK_R      = 0.285;               // 颈部半径
+const MAX_R       = 0.385;               // 最粗处半径
+const MID_R       = 0.295;               // 中后段半径
+const TIP_R       = 0.012;               // 尾尖半径
+const FLAT        = 0.84;                // 垂直压扁系数（蛇身横截面是扁圆的）
+const HEAD_LEAD   = 0.30;                // 头部相对头格中心的前伸量
+const HEAD_Y      = 0.015 + NECK_R * FLAT + 0.045;
+
+const COL_HEAD  = new THREE.Color(0x2fe6ff);   // 头端基色
+const COL_TAIL  = new THREE.Color(0x8cf05f);   // 尾端基色
+const COL_BELLY = new THREE.Color(0xdcffe6);   // 腹部提亮色
+const CR = [COL_HEAD.r, COL_HEAD.g, COL_HEAD.b];
+const TR = [COL_TAIL.r, COL_TAIL.g, COL_TAIL.b];
+const BR = [COL_BELLY.r, COL_BELLY.g, COL_BELLY.b];
+
+/* 身体管：预分配缓冲，逐帧原地更新（避免每帧新建几何体造成 GC 抖动） */
+const VMAX = MAX_RINGS * BODY_SEGS;
+const tubePos = new Float32Array(VMAX * 3);
+const tubeNrm = new Float32Array(VMAX * 3);
+const tubeCol = new Float32Array(VMAX * 3);
+const tubeIdx = new Uint32Array((MAX_RINGS - 1) * BODY_SEGS * 6);
+
+(function buildTubeIndex() {
+  let k = 0;
+  for (let r = 0; r < MAX_RINGS - 1; r++) {
+    for (let s = 0; s < BODY_SEGS; s++) {
+      const s2 = (s + 1) % BODY_SEGS;
+      const a = r * BODY_SEGS + s,  b = r * BODY_SEGS + s2;
+      const c = (r + 1) * BODY_SEGS + s2, d = (r + 1) * BODY_SEGS + s;
+      tubeIdx[k++] = a; tubeIdx[k++] = b; tubeIdx[k++] = c;
+      tubeIdx[k++] = a; tubeIdx[k++] = c; tubeIdx[k++] = d;
+    }
+  }
+})();
+
+const tubeGeo = new THREE.BufferGeometry();
+tubeGeo.setAttribute('position', new THREE.BufferAttribute(tubePos, 3).setUsage(THREE.DynamicDrawUsage));
+tubeGeo.setAttribute('normal', new THREE.BufferAttribute(tubeNrm, 3).setUsage(THREE.DynamicDrawUsage));
+tubeGeo.setAttribute('color', new THREE.BufferAttribute(tubeCol, 3).setUsage(THREE.DynamicDrawUsage));
+tubeGeo.setIndex(new THREE.BufferAttribute(tubeIdx, 1));
+tubeGeo.setDrawRange(0, 0);
+
+const bodyMesh = new THREE.Mesh(tubeGeo, new THREE.MeshStandardMaterial({
+  vertexColors: true,
+  roughness: 0.24,
+  metalness: 0.36,
+  emissive: 0x115a72,
+  emissiveIntensity: 0.9
+}));
+bodyMesh.castShadow = true;
+bodyMesh.receiveShadow = true;
+bodyMesh.frustumCulled = false;   // 顶点逐帧重写，包围球不可靠
+snakeGroup.add(bodyMesh);
+
+/* 蛇头：颅骨 + 吻部 + 下颌 + 琥珀色竖瞳 + 分叉信子 --------------- */
+function createHead() {
+  const g = new THREE.Group();
+
+  const skin = new THREE.MeshStandardMaterial({
+    color: 0x49e0d0, roughness: 0.46, metalness: 0.15,
+    emissive: 0x1fb8c8, emissiveIntensity: 0.45
+  });
+  const skinBack = new THREE.MeshStandardMaterial({
+    color: 0x2fb3c4, roughness: 0.5, metalness: 0.15,
+    emissive: 0x15809c, emissiveIntensity: 0.6
+  });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x08131c, roughness: 0.42, metalness: 0.2 });
+  const amber = new THREE.MeshStandardMaterial({
+    color: 0xffc247, roughness: 0.14, metalness: 0.12,
+    emissive: 0xd9860f, emissiveIntensity: 1.7
+  });
+
+  // 颅骨
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 18), skin);
+  skull.scale.set(0.335, 0.25, 0.40);
+  skull.position.z = 0.02;
+  g.add(skull);
+
+  // 下颌 / 颊部
+  const jaw = new THREE.Mesh(new THREE.SphereGeometry(1, 22, 16), skinBack);
+  jaw.scale.set(0.315, 0.175, 0.33);
+  jaw.position.set(0, -0.085, 0.10);
+  g.add(jaw);
+
+  // 吻部（前窄后宽，垂直压扁）
+  const snoutGeo = new THREE.CylinderGeometry(0.135, 0.30, 0.40, 22, 1);
+  snoutGeo.rotateX(Math.PI / 2);
+  snoutGeo.scale(1, 0.76, 1);
+  const snout = new THREE.Mesh(snoutGeo, skin);
+  snout.position.set(0, -0.01, 0.30);
+  g.add(snout);
+
+  // 两侧对称部件
+  [-1, 1].forEach(sx => {
+    // 眼窝
+    const socket = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), skin);
+    socket.scale.set(0.105, 0.105, 0.12);
+    socket.position.set(sx * 0.20, 0.085, 0.16);
+    g.add(socket);
+
+    // 眼球
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.088, 16, 14), amber);
+    ball.position.set(sx * 0.225, 0.09, 0.17);
+    g.add(ball);
+
+    // 竖瞳
+    const pupil = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.098, 0.03), dark);
+    pupil.position.set(sx * 0.305, 0.09, 0.17);
+    g.add(pupil);
+
+    // 眉脊（蛇特有的凶相）
+    const brow = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 10), skinBack);
+    brow.scale.set(0.10, 0.045, 0.115);
+    brow.position.set(sx * 0.175, 0.175, 0.15);
+    g.add(brow);
+
+    // 嘴角线
+    const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.016, 0.34), dark);
+    mouth.position.set(sx * 0.125, -0.045, 0.30);
+    g.add(mouth);
+
+    // 鼻孔
+    const nostril = new THREE.Mesh(new THREE.SphereGeometry(0.021, 10, 8), dark);
+    nostril.position.set(sx * 0.058, 0.045, 0.478);
+    g.add(nostril);
+  });
+
+  // 分叉信子（可伸缩）
+  const tongueMat = new THREE.MeshStandardMaterial({
+    color: 0xff3d68, roughness: 0.35, metalness: 0.1,
+    emissive: 0xff2d55, emissiveIntensity: 1.5
+  });
+  const tongue = new THREE.Group();
+  const shaftGeo = new THREE.CylinderGeometry(0.019, 0.024, 0.26, 8);
+  shaftGeo.rotateX(Math.PI / 2);
+  const shaft = new THREE.Mesh(shaftGeo, tongueMat);
+  shaft.position.z = 0.13;
+  tongue.add(shaft);
+  [-1, 1].forEach(sx => {
+    const prongGeo = new THREE.CylinderGeometry(0.012, 0.017, 0.17, 7);
+    prongGeo.rotateX(Math.PI / 2);
+    const prong = new THREE.Mesh(prongGeo, tongueMat);
+    prong.position.set(sx * 0.05, 0, 0.33);
+    prong.rotation.y = sx * 0.40;
+    tongue.add(prong);
+  });
+  tongue.position.set(0, -0.055, 0.46);
+  tongue.scale.z = 0.02;
+  tongue.visible = false;
+  g.add(tongue);
+  g.userData.tongue = tongue;
+
+  g.scale.setScalar(1.18);   // 头部略宽于颈部，轮廓更像蛇
+  return g;
+}
+
+const headMesh = createHead();
+snakeGroup.add(headMesh);
+
+/* ---------- 身体几何：折线 → 圆角 → 等弧长重采样 → 管体 ---------- */
+const _rX = [], _rZ = [];      // 原始折线（头 → 尾）
+const _sX = [], _sZ = [];      // 拐角圆角后
+const _cum = [];               // 累积弧长
+const _bX = [], _bZ = [];      // 重采样后的中心线
+const _tX = [], _tZ = [];      // 中心线切向（摆动前）
+const bulges = [];             // 吞咽凸起：{ s } 沿弧长向尾部移动
+
+function sstep(x) { const t = x < 0 ? 0 : x > 1 ? 1 : x; return t * t * (3 - 2 * t); }
+
+// 沿体长的半径分布：颈 → 最粗 → 中后段 → 尖尾
+function radiusAt(u) {
+  if (u < 0.20) return NECK_R + (MAX_R - NECK_R) * sstep(u / 0.20);
+  if (u < 0.66) return MAX_R + (MID_R - MAX_R) * ((u - 0.20) / 0.46);
+  return MID_R + (TIP_R - MID_R) * Math.pow((u - 0.66) / 0.34, 1.5);
+}
+
+// 每个拐点用二次贝塞尔切角（直角转弯处得到圆润的弧，直段保持笔直）
+function smoothCorners() {
+  _sX.length = 0; _sZ.length = 0;
+  const n = _rX.length;
+  if (n < 3) {
+    for (let i = 0; i < n; i++) { _sX.push(_rX[i]); _sZ.push(_rZ[i]); }
+    return;
+  }
+  _sX.push(_rX[0]); _sZ.push(_rZ[0]);
+  for (let i = 1; i < n - 1; i++) {
+    const vx = _rX[i], vz = _rZ[i];
+    let ax = _rX[i - 1] - vx, az = _rZ[i - 1] - vz;
+    let bx = _rX[i + 1] - vx, bz = _rZ[i + 1] - vz;
+    const la = Math.hypot(ax, az), lb = Math.hypot(bx, bz);
+    if (la < 1e-6 || lb < 1e-6) { _sX.push(vx); _sZ.push(vz); continue; }
+    ax /= la; az /= la; bx /= lb; bz /= lb;
+    if (Math.abs(ax * bz - az * bx) < 1e-4) { _sX.push(vx); _sZ.push(vz); continue; }
+    const r = Math.min(CORNER_R, la * 0.45, lb * 0.45);
+    const p1x = vx + ax * r, p1z = vz + az * r;
+    const p2x = vx + bx * r, p2z = vz + bz * r;
+    for (let k = 0; k < CORNER_SEG; k++) {
+      const t = k / (CORNER_SEG - 1), m = 1 - t;
+      _sX.push(m * m * p1x + 2 * m * t * vx + t * t * p2x);
+      _sZ.push(m * m * p1z + 2 * m * t * vz + t * t * p2z);
+    }
+  }
+  _sX.push(_rX[n - 1]); _sZ.push(_rZ[n - 1]);
+}
+
+let ringCount = 0;
+
+function buildSnakeBody(t, dt) {
+  if (snake.length < 2) { tubeGeo.setDrawRange(0, 0); headMesh.visible = false; return; }
+  headMesh.visible = true;
+
+  // 1) 原始折线：蛇头用帧间插值位置，其余为各节格子中心
+  _rX.length = 0; _rZ.length = 0;
+  for (let i = 0; i < snake.length; i++) {
+    const s = snake[i];
+    _rX.push(cellX(s.pgx) + (cellX(s.gx) - cellX(s.pgx)) * t);
+    _rZ.push(cellZ(s.pgz) + (cellZ(s.gz) - cellZ(s.pgz)) * t);
+  }
+
+  // 2) 拐角圆角
+  smoothCorners();
+
+  // 3) 累积弧长
+  const ns = _sX.length;
+  _cum.length = 0;
+  let total = 0;
+  _cum.push(0);
+  for (let i = 1; i < ns; i++) {
+    total += Math.hypot(_sX[i] - _sX[i - 1], _sZ[i] - _sZ[i - 1]);
+    _cum.push(total);
+  }
+  if (total < 0.08 || ns < 2) { tubeGeo.setDrawRange(0, 0); return; }
+
+  // 4) 等弧长重采样
+  let step = total / 160;
+  if (step < 0.10) step = 0.10; else if (step > SAMPLE_STEP) step = SAMPLE_STEP;
+  let rings = Math.ceil(total / step) + 1;
+  if (rings > MAX_RINGS) { rings = MAX_RINGS; step = total / (rings - 1); }
+  if (rings < 4) rings = 4;
+  ringCount = rings;
+
+  _bX.length = 0; _bZ.length = 0;
+  let seg = 0;
+  for (let i = 0; i < rings; i++) {
+    const target = Math.min(i * step, total);
+    while (seg < ns - 2 && _cum[seg + 1] < target) seg++;
+    const segLen = _cum[seg + 1] - _cum[seg];
+    const f = segLen > 1e-9 ? (target - _cum[seg]) / segLen : 0;
+    const x0 = _sX[seg], z0 = _sZ[seg];
+    const x1 = _sX[seg + 1], z1 = _sZ[seg + 1];
+    _bX.push(x0 + (x1 - x0) * f);
+    _bZ.push(z0 + (z1 - z0) * f);
+  }
+
+  const tm = performance.now() / 1000;
+
+  // 5) 基础切向
+  _tX.length = 0; _tZ.length = 0;
+  for (let i = 0; i < rings; i++) {
+    const i0 = i > 0 ? i - 1 : 0, i1 = i < rings - 1 ? i + 1 : rings - 1;
+    let tx = _bX[i1] - _bX[i0], tz = _bZ[i1] - _bZ[i0];
+    const l = Math.hypot(tx, tz) || 1;
+    _tX.push(tx / l); _tZ.push(tz / l);
+  }
+
+  // 6) 侧向行进波：头部振幅为 0，向尾部增强；波峰朝尾端传播（真蛇的侧向蠕动）
+  const waveK = (Math.PI * 2) / 2.35;
+  const vWave = (CELL / Math.max(stepInterval, 0.02)) * 0.80;
+  for (let i = 0; i < rings; i++) {
+    const u = i / (rings - 1);
+    const env = Math.min(1, u / 0.30) * (u > 0.90 ? 1 - ((u - 0.90) / 0.10) * 0.45 : 1);
+    if (env <= 0) continue;
+    const ph = (i * step - vWave * tm) * waveK;
+    const off = 0.105 * env * (Math.sin(ph) + 0.34 * Math.sin(ph * 2 + 1.3));
+    _bX[i] += _tZ[i] * off;
+    _bZ[i] -= _tX[i] * off;
+  }
+
+  // 7) 吞咽凸起向尾部推进
+  if (dt) {
+    for (let i = bulges.length - 1; i >= 0; i--) {
+      bulges[i].s += 2.7 * dt;
+      if (bulges[i].s > total + 0.6) bulges.splice(i, 1);
+    }
+  }
+
+  // 8) 逐环写入顶点：扁圆横截面 + 锥度 + 背纹 + 亮腹
+  const wob = Math.sin(tm * 2.4) * 0.018;
+  for (let i = 0; i < rings; i++) {
+    const u = i / (rings - 1);
+    const i0 = i > 0 ? i - 1 : 0, i1 = i < rings - 1 ? i + 1 : rings - 1;
+    let tx = _bX[i1] - _bX[i0], tz = _bZ[i1] - _bZ[i0];
+    const tl = Math.hypot(tx, tz) || 1;
+    tx /= tl; tz /= tl;
+    const sx = tz, sz = -tx;                       // 水平面内垂直于切向
+
+    let r = radiusAt(u);
+    for (let k = 0; k < bulges.length; k++) {
+      const d = (i * step - bulges[k].s) / 0.55;
+      r *= 1 + 0.28 * Math.exp(-d * d);
+    }
+    const ry = r * FLAT;
+    const px = _bX[i], pz = _bZ[i];
+    const py = 0.015 + ry + wob * Math.min(1, u / 0.25);   // 腹部贴地
+
+    // 背部横纹（鳞纹）按弧长分布：波长≈1.4 格，与身体长度无关
+    const band = Math.pow(Math.abs(Math.sin(i * step * 4.6 + 0.7)), 5);
+    const base = u * 0.92;
+    const bR = CR[0] + (TR[0] - CR[0]) * base;
+    const bG = CR[1] + (TR[1] - CR[1]) * base;
+    const bB = CR[2] + (TR[2] - CR[2]) * base;
+
+    for (let a = 0; a < BODY_SEGS; a++) {
+      const ang = (a / BODY_SEGS) * Math.PI * 2;
+      const ca = Math.cos(ang), sa = Math.sin(ang);
+      const vi = (i * BODY_SEGS + a) * 3;
+
+      tubePos[vi]     = px + sx * ca * r;
+      tubePos[vi + 1] = py + sa * ry;
+      tubePos[vi + 2] = pz + sz * ca * r;
+
+      // 椭圆外法线（解析给出，省掉 computeVertexNormals）
+      let nx = sx * (ca / r), ny = sa / ry, nz = sz * (ca / r);
+      const nl = Math.hypot(nx, ny, nz) || 1;
+      tubeNrm[vi] = nx / nl; tubeNrm[vi + 1] = ny / nl; tubeNrm[vi + 2] = nz / nl;
+
+      const belly = sa < 0 ? -sa : 0;
+      const bellyK = belly * belly * 0.62;
+      const dark = 1 - 0.42 * band * (0.4 + 0.6 * (1 - belly));
+
+      let cr = bR * dark, cg = bG * dark, cb = bB * dark;
+      cr += (BR[0] - cr) * bellyK;
+      cg += (BR[1] - cg) * bellyK;
+      cb += (BR[2] - cb) * bellyK;
+      tubeCol[vi] = cr; tubeCol[vi + 1] = cg; tubeCol[vi + 2] = cb;
+    }
+  }
+
+  tubeGeo.attributes.position.needsUpdate = true;
+  tubeGeo.attributes.normal.needsUpdate = true;
+  tubeGeo.attributes.color.needsUpdate = true;
+  tubeGeo.setDrawRange(0, (rings - 1) * BODY_SEGS * 6);
+
+  // 9) 头部：沿中心线前伸，转向时带一点侧倾
+  headMesh.position.set(
+    _bX[0] + _tX[0] * HEAD_LEAD,
+    HEAD_Y + wob,
+    _bZ[0] + _tZ[0] * HEAD_LEAD
+  );
+  const yawTarget = dirYaw();
+  headMesh.rotation.y = angleLerp(headMesh.rotation.y, yawTarget, 0.42);
+  let dy = headMesh.rotation.y - yawTarget;
+  dy = ((dy + Math.PI) % (Math.PI * 2)) - Math.PI;
+  headMesh.rotation.z = THREE.MathUtils.clamp(dy * 0.85, -0.32, 0.32);
+}
+
+/* ---------- 吐信：平时收回，定时快速弹出；靠近食物时更频繁 ---------- */
+const FLICK_DUR = 0.42;
+let tongueTimer = 1.4, tongueLife = 0;
+
+function updateTongue(dt) {
+  const tongue = headMesh.userData.tongue;
+  if (!tongue) return;
+  if (tongueLife > 0) {
+    tongueLife -= dt;
+    if (tongueLife < 0) tongueLife = 0;
+  } else {
+    tongueTimer -= dt;
+    if (tongueTimer <= 0) {
+      tongueLife = FLICK_DUR;
+      const h = snake[0];
+      const near = h && (Math.abs(h.gx - food.gx) + Math.abs(h.gz - food.gz) <= 3);
+      tongueTimer = state === 'playing' ? (near ? 0.75 : 2.0 + Math.random() * 1.5) : 1.8;
+    }
+  }
+  let k = 0;
+  if (tongueLife > 0) {
+    const p = 1 - tongueLife / FLICK_DUR;
+    if (p < 0.22) k = p / 0.22;
+    else if (p < 0.62) k = 1;
+    else k = Math.max(0, 1 - (p - 0.62) / 0.38);
+  }
+  tongue.scale.z = 0.02 + k * 0.98;
+  tongue.visible = k > 0.03;
+}
+
+/* ============================================================
+   食物
+   ============================================================ */
+function createFood() {
+  const g = new THREE.Group();
+  const core = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(0.42, 1),
+    new THREE.MeshStandardMaterial({
+      color: 0xffc46a, roughness: 0.15, metalness: 0.45,
+      emissive: 0xff9a2e, emissiveIntensity: 2.2, flatShading: true
+    })
+  );
+  core.castShadow = true;
+  g.add(core);
+
+  const halo = new THREE.Mesh(
+    new THREE.SphereGeometry(0.72, 18, 18),
+    new THREE.MeshBasicMaterial({ color: 0xffb648, transparent: true, opacity: 0.13, blending: THREE.AdditiveBlending, depthWrite: false })
+  );
+  g.add(halo);
+
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(0.6, 0.78, 40),
+    new THREE.MeshBasicMaterial({ color: 0xffb648, transparent: true, opacity: 0.5, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false })
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = -0.45;
+  g.add(ring);
+
+  const light = new THREE.PointLight(0xffa02e, 2.4, 9, 2);
+  g.add(light);
+
+  g.userData.core = core;
+  g.userData.halo = halo;
+  g.userData.ring = ring;
+  g.userData.light = light;
+  scene.add(g);
+  return g;
+}
+
+/* ============================================================
+   粒子（吃到食物时的爆散）
+   ============================================================ */
+const PCOUNT = 320;
+let pPos, pVel, pLife, pColor, pGeo, pPoints;
+(function initParticles() {
+  pPos = new Float32Array(PCOUNT * 3);
+  pVel = new Float32Array(PCOUNT * 3);
+  pLife = new Float32Array(PCOUNT);
+  pColor = new Float32Array(PCOUNT * 3);
+  for (let i = 0; i < PCOUNT; i++) pPos[i * 3 + 1] = -999;
+
+  pGeo = new THREE.BufferGeometry();
+  pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+  pGeo.setAttribute('color', new THREE.BufferAttribute(pColor, 3));
+
+  // 圆形贴图
+  const s = 64, c = document.createElement('canvas');
+  c.width = c.height = s;
+  const ctx = c.getContext('2d');
+  const grd = ctx.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+  grd.addColorStop(0, 'rgba(255,255,255,1)');
+  grd.addColorStop(0.45, 'rgba(255,255,255,.7)');
+  grd.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, s, s);
+
+  const mat = new THREE.PointsMaterial({
+    size: 0.34, vertexColors: true, map: new THREE.CanvasTexture(c),
+    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true
+  });
+  pPoints = new THREE.Points(pGeo, mat);
+  pPoints.frustumCulled = false;
+  scene.add(pPoints);
+})();
+
+let pCursor = 0;
+function burst(x, y, z, count = 26, hue = 0.09) {
+  const col = new THREE.Color().setHSL(hue + Math.random() * 0.06, 1, 0.62);
+  for (let k = 0; k < count; k++) {
+    const i = pCursor; pCursor = (pCursor + 1) % PCOUNT;
+    pPos[i * 3] = x; pPos[i * 3 + 1] = y; pPos[i * 3 + 2] = z;
+    const sp = 2.4 + Math.random() * 5.2;
+    const th = Math.random() * Math.PI * 2;
+    const ph = Math.acos(2 * Math.random() - 1);
+    pVel[i * 3]     = Math.sin(ph) * Math.cos(th) * sp;
+    pVel[i * 3 + 1] = Math.abs(Math.cos(ph)) * sp * 0.85 + 2;
+    pVel[i * 3 + 2] = Math.sin(ph) * Math.sin(th) * sp;
+    pLife[i] = 0.6 + Math.random() * 0.55;
+    pColor[i * 3] = col.r; pColor[i * 3 + 1] = col.g; pColor[i * 3 + 2] = col.b;
+  }
+  pGeo.attributes.position.needsUpdate = true;
+  pGeo.attributes.color.needsUpdate = true;
+}
+
+function updateParticles(dt) {
+  let dirty = false;
+  for (let i = 0; i < PCOUNT; i++) {
+    if (pLife[i] <= 0) continue;
+    pLife[i] -= dt;
+    dirty = true;
+    if (pLife[i] <= 0) { pPos[i * 3 + 1] = -999; continue; }
+    pVel[i * 3 + 1] -= 13 * dt;
+    pPos[i * 3]     += pVel[i * 3] * dt;
+    pPos[i * 3 + 1] += pVel[i * 3 + 1] * dt;
+    pPos[i * 3 + 2] += pVel[i * 3 + 2] * dt;
+    if (pPos[i * 3 + 1] < 0.08) { pPos[i * 3 + 1] = 0.08; pVel[i * 3 + 1] *= -0.42; pVel[i * 3] *= 0.72; pVel[i * 3 + 2] *= 0.72; }
+  }
+  if (dirty) pGeo.attributes.position.needsUpdate = true;
+}
+
+/* ============================================================
+   音效 + 程序化背景音乐（全部用 Web Audio 合成，不依赖音频文件）
+   ============================================================ */
+let audioCtx = null;
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+function beep(freq, dur, type, gain) {
+  if (!soundOn) return;
+  try {
+    const ctx = getAudioCtx();
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type || 'sine';
+    o.frequency.setValueAtTime(freq, ctx.currentTime);
+    g.gain.setValueAtTime(gain || 0.05, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(); o.stop(ctx.currentTime + dur);
+  } catch (e) { /* 忽略 */ }
+}
+
+/* ---------- 音乐引擎：前瞻调度 + 每主题音阶/节奏/音色 ---------- */
+let musicOn = localStorage.getItem('snake3d_music') !== '0';
+const MUSIC = { master: null, delay: null, wet: null, noise: null, on: false, theme: null, step: 0, next: 0, ready: false };
+
+function hz(midi) { return 440 * Math.pow(2, (midi - 69) / 12); }
+
+function noiseBuffer(ctx) {
+  if (MUSIC.noise) return MUSIC.noise;
+  const len = ctx.sampleRate * 2;
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  MUSIC.noise = buf;
+  return buf;
+}
+
+function musicChain(ctx) {
+  if (MUSIC.master) return;
+  const m = MUSIC.theme.music;
+  MUSIC.master = ctx.createGain();
+  MUSIC.master.gain.value = 0;
+  MUSIC.master.connect(ctx.destination);
+
+  // 反馈延迟当混响，给不同主题不同空间感
+  MUSIC.delay = ctx.createDelay(1.5);
+  MUSIC.delay.delayTime.value = m.delay;
+  const fb = ctx.createGain();
+  fb.gain.value = m.feedback;
+  MUSIC.wet = ctx.createGain();
+  MUSIC.wet.gain.value = m.wet;
+  MUSIC.master.connect(MUSIC.delay);
+  MUSIC.delay.connect(fb); fb.connect(MUSIC.delay);
+  MUSIC.delay.connect(MUSIC.wet); MUSIC.wet.connect(ctx.destination);
+}
+
+// 拨弦 / 键盘音
+function vPluck(ctx, f, t, dur, type, gain, cut) {
+  const o = ctx.createOscillator(), g = ctx.createGain(), lp = ctx.createBiquadFilter();
+  o.type = type; o.frequency.setValueAtTime(f, t);
+  if (type === 'sawtooth' || type === 'square') o.detune.setValueAtTime((Math.random() - 0.5) * 14, t);
+  lp.type = 'lowpass'; lp.frequency.setValueAtTime(cut, t);
+  lp.Q.value = 0.9;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(gain, t + 0.014);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(lp); lp.connect(g); g.connect(MUSIC.master);
+  o.start(t); o.stop(t + dur + 0.03);
+}
+
+// 低音 / 长音（两个失谐振荡器叠加）
+function vPad(ctx, f, t, dur, type, gain, cut) {
+  const g = ctx.createGain(), lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass'; lp.frequency.setValueAtTime(cut, t); lp.Q.value = 0.7;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(gain, t + dur * 0.32);
+  g.gain.linearRampToValueAtTime(gain * 0.75, t + dur * 0.7);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  lp.connect(g); g.connect(MUSIC.master);
+  for (const det of [-6, 6]) {
+    const o = ctx.createOscillator();
+    o.type = type; o.frequency.setValueAtTime(f, t); o.detune.setValueAtTime(det, t);
+    o.connect(lp); o.start(t); o.stop(t + dur + 0.03);
+  }
+}
+
+// 噪声层：海浪 / 风声 / 岩浆轰鸣
+function vNoise(ctx, t, dur, gain, type, freq, q) {
+  const src = ctx.createBufferSource();
+  src.buffer = noiseBuffer(ctx);
+  src.loop = true;
+  const f = ctx.createBiquadFilter();
+  f.type = type; f.frequency.setValueAtTime(freq, t); f.Q.value = q;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(gain, t + dur * 0.35);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(f); f.connect(g); g.connect(MUSIC.master);
+  src.start(t); src.stop(t + dur + 0.03);
+}
+
+function musicScheduleStep(ctx, step, t) {
+  const m = MUSIC.theme.music;
+  const lead = m.lead, bass = m.bass, perc = m.perc;
+  const nl = lead.length;
+
+  // 主旋律 / 琶音
+  const lv = lead[step % nl];
+  if (lv !== null && lv !== undefined) {
+    const oct = m.octOf ? m.octOf(step, lv) : 0;
+    vPluck(ctx, hz(m.root + m.scale[((lv % m.scale.length) + m.scale.length) % m.scale.length] + 12 * (m.oct + oct)),
+      t, m.leadDur, m.leadType, m.leadGain, m.leadCut);
+  }
+  // 低音
+  const nb = bass.length;
+  const bv = bass[step % nb];
+  if (bv !== null && bv !== undefined) {
+    vPad(ctx, hz(m.root - 12 + m.scale[bv % m.scale.length]), t, m.bassDur, m.bassType || 'triangle', m.bassGain, 420);
+  }
+  // 打击 / 质感
+  if (perc) {
+    const pv = perc[step % perc.length];
+    if (pv !== null && pv !== undefined) {
+      vNoise(ctx, t, pv === 0 ? 0.16 : 0.5, pv === 0 ? 0.028 : 0.02, pv === 0 ? 'bandpass' : 'highpass', pv === 0 ? 1800 : 3200, 1.2);
+    }
+  }
+  // 长噪声层（海浪 / 风 / 轰鸣）按步数周期触发
+  const nz = m.noise;
+  if (nz && step % nz.every === 0) {
+    vNoise(ctx, t, nz.dur, nz.gain, nz.type, nz.freq, nz.q || 1);
+  }
+}
+
+function musicUpdate() {
+  if (!musicOn || !MUSIC.theme || (state !== 'playing' && state !== 'paused')) {
+    if (MUSIC.master && MUSIC.ready) {
+      const ctx = getAudioCtx();
+      MUSIC.master.gain.setTargetAtTime(0, ctx.currentTime, 0.12);
+      MUSIC.ready = false;
+    }
+    return;
+  }
+  const ctx = getAudioCtx();
+  if (ctx.state !== 'running') return;      // 需要用户手势后才开始排音，避免积压
+  musicChain(ctx);
+  const now = ctx.currentTime;
+  if (!MUSIC.ready) {
+    MUSIC.step = 0;
+    MUSIC.next = now + 0.1;
+    MUSIC.ready = true;
+    MUSIC.master.gain.setTargetAtTime(MUSIC.theme.music.volume, now, 0.9);
+  }
+  if (MUSIC.next < now) MUSIC.next = now + 0.05;
+  const dur = 60 / MUSIC.theme.music.bpm / 4;      // 十六分音符
+  let guard = 0;
+  while (MUSIC.next < now + 0.34 && guard++ < 32) {
+    musicScheduleStep(ctx, MUSIC.step, MUSIC.next);
+    MUSIC.step++;
+    MUSIC.next += dur;
+  }
+}
+
+function musicSetTheme(t) {
+  if (!MUSIC.theme || MUSIC.theme.id !== t.id) {
+    MUSIC.theme = t;
+    MUSIC.ready = false;         // 换主题后重新起拍
+  }
+}
+
+function toggleMusic() {
+  musicOn = !musicOn;
+  localStorage.setItem('snake3d_music', musicOn ? '1' : '0');
+  $('btn-music').classList.toggle('off', !musicOn);
+  if (musicOn) {
+    MUSIC.ready = false;
+    getAudioCtx();
+  } else if (MUSIC.master) {
+    MUSIC.master.gain.setTargetAtTime(0, getAudioCtx().currentTime, 0.1);
+    MUSIC.ready = false;
+  }
+}
+
+/* ============================================================
+   主题地图：背景 + 地面 + 水面 + 灯光 + 道具 + 氛围 + 配乐
+   ============================================================ */
+let floorTex = null, surfTex = null;
+let curTheme = null, themeIndex = -1;
+let foodStyle = null;
+
+const THEMES = [
+  /* ---------------- 沙滩 ---------------- */
+  {
+    id: 'beach', name: '沙滩', icon: '🏖',
+    bg: 0x10344d, fog: [34, 112],
+    floor: { a: '#e6d6a6', b: '#d6c48c', line: 'rgba(255,255,255,0.17)', grain: true,
+             emissive: 0x2a1f0a, emissiveIntensity: 0.25, roughness: 0.94, metalness: 0.04 },
+    groundColor: 0xd2bd85,
+    surface: { y: -0.42, base: '#1c7f9e', hiA: 'rgba(255,255,255,0.30)', hiB: 'rgba(255,255,255,0)',
+               opacity: 0.88, emissive: 0x0a3a4a, emissiveIntensity: 0.5, roughness: 0.62, metalness: 0.12 },
+    base: { color: 0x5f4f2c, emissive: 0x2a1f08, ei: 0.6 },
+    wall: { color: 0x2b8fa8, emissive: 0x2fc8e0, ei: 0.72, opacity: 0.5 },
+    pillar: 0xffe6a0,
+    hemi: { sky: 0xc8ecff, ground: 0xd9c58f, i: 1.35 },
+    key: { color: 0xfff2d2, i: 1.75, pos: [16, 28, 14] },
+    rim: { color: 0x39dcff, i: 0.55 },
+    glow: 0x6ff0d0,
+    food: { color: 0xff8f3c, emissive: 0xff5a12, halo: 0xffa050, light: 0xffa63c, burst: 0.075 },
+    ambient: { color: 0xfff0c8, size: 0.22, opacity: 0.7, rise: 0.5, drift: 1.7 },
+    props: g => {
+      const rockA = pmat(0x9c8f74, 0.9), rockB = pmat(0xb5a685, 0.85);
+      scatter(g, 7, 17, 34, (gg, x, z) => addPalm(gg, x, z, 4.6 + Math.random() * 3.2));
+      scatter(g, 14, 15, 42, (gg, x, z) => addRock(gg, x, z, 0.5 + Math.random() * 1.5, Math.random() < 0.5 ? rockA : rockB));
+      // 远处的太阳
+      const sun = new THREE.Mesh(new THREE.SphereGeometry(7, 20, 16),
+        new THREE.MeshBasicMaterial({ color: 0xfff0b8 }));
+      sun.position.set(58, 26, -78);
+      g.add(sun);
+      const sunGlow = new THREE.Mesh(new THREE.SphereGeometry(13, 20, 16),
+        new THREE.MeshBasicMaterial({ color: 0xffe090, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false }));
+      sunGlow.position.copy(sun.position);
+      g.add(sunGlow);
+    },
+    music: {
+      root: 57, scale: [0, 2, 4, 7, 9], bpm: 74, oct: 0,
+      lead: [0, 2, 4, null, 3, 2, 0, null, 1, 3, 4, null, 2, 1, 0, null],
+      leadType: 'triangle', leadGain: 0.05, leadDur: 0.72, leadCut: 2600,
+      bass: [0, null, null, null, 3, null, null, null, 2, null, null, null, 4, null, null, null],
+      bassType: 'sine', bassGain: 0.055, bassDur: 2.2,
+      perc: [1, null, null, null, null, null, null, null, 1, null, null, null, null, null, null, null],
+      noise: { every: 8, dur: 3.2, gain: 0.05, type: 'lowpass', freq: 520, q: 0.8 },
+      delay: 0.44, feedback: 0.34, wet: 0.3, volume: 0.5
+    }
+  },
+
+  /* ---------------- 火山 ---------------- */
+  {
+    id: 'volcano', name: '火山', icon: '🌋',
+    bg: 0x1a0703, fog: [22, 72],
+    floor: { a: '#2a1410', b: '#1d0d0a', line: 'rgba(255,120,60,0.16)', grain: true,
+             emissive: 0x3a0f04, emissiveIntensity: 0.5, roughness: 0.8, metalness: 0.12 },
+    groundColor: 0x201210,
+    surface: { y: -0.44, base: '#5a1206', hiA: 'rgba(255,190,80,0.72)', hiB: 'rgba(255,80,0,0)',
+               opacity: 1, emissive: 0xff4a10, emissiveIntensity: 1.15, roughness: 0.78, metalness: 0.05 },
+    base: { color: 0x180b08, emissive: 0x5a1a06, ei: 0.9 },
+    wall: { color: 0x2a1210, emissive: 0xff5a20, ei: 0.8, opacity: 0.6 },
+    pillar: 0xff7a30,
+    hemi: { sky: 0xff9a60, ground: 0x2a1008, i: 1.0 },
+    key: { color: 0xffb070, i: 1.6, pos: [14, 24, 10] },
+    rim: { color: 0xff3a10, i: 0.7 },
+    glow: 0xff5a20,
+    food: { color: 0xffe14a, emissive: 0xff8a00, halo: 0xffb040, light: 0xffa020, burst: 0.06 },
+    ambient: { color: 0xff7a30, size: 0.26, opacity: 0.95, rise: 1.5, drift: 0.85 },
+    props: g => {
+      const basalt = pmat(0x1d1412, 0.95), basalt2 = pmat(0x2a1a16, 0.9);
+      const hot = pmat(0x3a1408, 0.7, 0.1, 0xff4a10, 1.2);
+      scatter(g, 18, 15, 46, (gg, x, z) => addRock(gg, x, z, 0.6 + Math.random() * 2.1, Math.random() < 0.5 ? basalt : basalt2));
+      scatter(g, 8, 16, 40, (gg, x, z) => addRock(gg, x, z, 1.4 + Math.random() * 1.6, hot));
+      scatter(g, 9, 17, 40, (gg, x, z) => addShard(gg, x, z, 1.6 + Math.random() * 2.4, hot));
+    },
+    music: {
+      root: 50, scale: [0, 2, 3, 5, 7, 8, 11], bpm: 96, oct: 0,
+      lead: [0, 3, 2, null, 6, 5, 4, null, 0, 3, 5, null, 4, 3, 1, null],
+      leadType: 'sawtooth', leadGain: 0.036, leadDur: 0.36, leadCut: 1500,
+      bass: [0, null, 0, null, 5, null, 5, null, 0, null, 0, null, 6, null, 4, null],
+      bassType: 'sawtooth', bassGain: 0.058, bassDur: 0.95,
+      perc: [0, null, 0, 0, null, 0, null, 0, 0, null, 0, 0, null, 1, null, 0],
+      noise: { every: 4, dur: 1.6, gain: 0.045, type: 'lowpass', freq: 180, q: 1.4 },
+      delay: 0.28, feedback: 0.4, wet: 0.26, volume: 0.44
+    }
+  },
+
+  /* ---------------- 山林 ---------------- */
+  {
+    id: 'forest', name: '山林', icon: '🌲',
+    bg: 0x08160f, fog: [24, 88],
+    floor: { a: '#16301f', b: '#102618', line: 'rgba(120,240,160,0.12)', grain: true,
+             emissive: 0x06281a, emissiveIntensity: 0.45, roughness: 0.9, metalness: 0.08 },
+    groundColor: 0x14291c,
+    surface: null,
+    base: { color: 0x0a1a12, emissive: 0x14402a, ei: 0.7 },
+    wall: { color: 0x123024, emissive: 0x3affa0, ei: 0.6, opacity: 0.55 },
+    pillar: 0x7cffb0,
+    hemi: { sky: 0xa8ffd0, ground: 0x14281a, i: 1.15 },
+    key: { color: 0xd8ffd0, i: 1.5, pos: [12, 30, 16] },
+    rim: { color: 0x2fffa0, i: 0.6 },
+    glow: 0x5cffa8,
+    food: { color: 0xa8ff4a, emissive: 0x4ad820, halo: 0x8cf050, light: 0x7ce838, burst: 0.26 },
+    ambient: { color: 0xbfffa0, size: 0.2, opacity: 0.72, rise: -0.45, drift: 1.25 },
+    props: g => {
+      const bark = pmat(0x3a2a1c, 0.95), leafA = pmat(0x1e6b3a, 0.8, 0.05, 0x0d3a1c, 0.3), leafB = pmat(0x2a8a48, 0.78, 0.05, 0x104a24, 0.28);
+      const rock = pmat(0x2a2f2a, 0.95);
+      scatter(g, 34, 16, 48, (gg, x, z) => addPine(gg, x, z, 4.2 + Math.random() * 4.4, bark, Math.random() < 0.5 ? leafA : leafB));
+      scatter(g, 12, 15, 42, (gg, x, z) => addRock(gg, x, z, 0.45 + Math.random() * 1.2, rock));
+      scatter(g, 16, 12, 40, (gg, x, z) => {
+        const bush = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5 + Math.random() * 0.6, 0), Math.random() < 0.5 ? leafA : leafB);
+        bush.position.set(x, PROP_BASE + 0.4, z);
+        bush.scale.set(1, 0.72, 1);
+        bush.castShadow = true;
+        gg.add(bush);
+      });
+    },
+    music: {
+      root: 55, scale: [0, 2, 4, 7, 9], bpm: 88, oct: 0,
+      octOf: (s, lv) => (lv >= 5 ? 1 : 0),
+      lead: [0, 2, 4, 5, 3, 2, 1, 3, 4, 6, 3, 2, 0, 2, 1, null],
+      leadType: 'triangle', leadGain: 0.042, leadDur: 0.44, leadCut: 3000,
+      bass: [0, null, null, null, 4, null, null, null, 1, null, null, null, 3, null, null, null],
+      bassType: 'triangle', bassGain: 0.05, bassDur: 1.8,
+      perc: [1, null, null, null, null, 1, null, null, 0, null, null, 1, null, null, 0, null],
+      noise: { every: 8, dur: 2.6, gain: 0.03, type: 'bandpass', freq: 900, q: 0.7 },
+      delay: 0.36, feedback: 0.28, wet: 0.28, volume: 0.5
+    }
+  },
+
+  /* ---------------- 沼泽 ---------------- */
+  {
+    id: 'swamp', name: '沼泽', icon: '🐸',
+    bg: 0x0b1410, fog: [18, 66],
+    floor: { a: '#20281a', b: '#182015', line: 'rgba(150,200,120,0.10)', grain: true,
+             emissive: 0x101c0c, emissiveIntensity: 0.5, roughness: 0.95, metalness: 0.1 },
+    groundColor: 0x1a2014,
+    surface: { y: -0.36, base: '#1d2a16', hiA: 'rgba(150,200,120,0.22)', hiB: 'rgba(60,90,50,0)',
+               opacity: 0.94, emissive: 0x1e3a12, emissiveIntensity: 0.55, roughness: 0.62, metalness: 0.08 },
+    base: { color: 0x121a0e, emissive: 0x1e3a14, ei: 0.7 },
+    wall: { color: 0x1a2416, emissive: 0x8ad24a, ei: 0.55, opacity: 0.55 },
+    pillar: 0xa8e060,
+    hemi: { sky: 0xa8c890, ground: 0x18200f, i: 1.0 },
+    key: { color: 0xd0e0b0, i: 1.35, pos: [-10, 22, 14] },
+    rim: { color: 0x6ad24a, i: 0.5 },
+    glow: 0x9ce050,
+    food: { color: 0xd8ff5a, emissive: 0x8ad218, halo: 0xc0f040, light: 0xa8e828, burst: 0.22 },
+    ambient: { color: 0xbfe090, size: 0.34, opacity: 0.5, rise: 0.25, drift: 0.5 },
+    propBase: -0.56,
+    props: g => {
+      const dead = pmat(0x2e2a1c, 0.95), dead2 = pmat(0x3a3423, 0.9);
+      const mud = pmat(0x2a3018, 0.98), rock = pmat(0x262c1e, 0.95);
+      scatter(g, 18, 16, 46, (gg, x, z) => addDeadTree(gg, x, z, 3.2 + Math.random() * 4.2, Math.random() < 0.5 ? dead : dead2));
+      scatter(g, 12, 14, 40, (gg, x, z) => {
+        const mound = new THREE.Mesh(new THREE.SphereGeometry(0.7 + Math.random() * 1.1, 10, 7), mud);
+        mound.position.set(x, PROP_BASE + 0.55, z);
+        mound.scale.set(1, 0.62, 1);
+        mound.castShadow = true;
+        gg.add(mound);
+      });
+      scatter(g, 10, 15, 40, (gg, x, z) => addRock(gg, x, z, 0.5 + Math.random() * 1.3, rock));
+    },
+    music: {
+      root: 50, scale: [0, 3, 5, 6, 7, 10], bpm: 62, oct: 0,
+      lead: [0, null, 3, null, 4, null, 3, null, 0, null, 2, null, 1, null, null, null],
+      leadType: 'square', leadGain: 0.028, leadDur: 0.95, leadCut: 900,
+      bass: [0, null, null, null, null, null, 0, null, 3, null, null, null, null, null, 4, null],
+      bassType: 'sine', bassGain: 0.055, bassDur: 2.6,
+      perc: [1, null, null, null, null, null, 0, null, null, null, 1, null, null, null, null, null],
+      noise: { every: 8, dur: 4, gain: 0.035, type: 'lowpass', freq: 300, q: 0.6 },
+      delay: 0.52, feedback: 0.42, wet: 0.36, volume: 0.46
+    }
+  },
+
+  /* ---------------- 大海 ---------------- */
+  {
+    id: 'ocean', name: '大海', icon: '🌊',
+    bg: 0x04202e, fog: [20, 78],
+    floor: { a: '#0e3346', b: '#0b2a3a', line: 'rgba(90,220,255,0.14)', grain: true,
+             emissive: 0x0a3040, emissiveIntensity: 0.6, roughness: 0.72, metalness: 0.2 },
+    groundColor: 0x0d2a38,
+    surface: { y: -0.30, base: '#0a4a68', hiA: 'rgba(180,255,255,0.32)', hiB: 'rgba(20,120,160,0)',
+               opacity: 0.82, emissive: 0x0b4a66, emissiveIntensity: 0.8, roughness: 0.5, metalness: 0.18 },
+    base: { color: 0x08303f, emissive: 0x0d5a78, ei: 0.85 },
+    wall: { color: 0x0e3f52, emissive: 0x3ad8ff, ei: 0.75, opacity: 0.58 },
+    pillar: 0x8ff0ff,
+    hemi: { sky: 0x9de8ff, ground: 0x0a2838, i: 1.2 },
+    key: { color: 0xd0f4ff, i: 1.6, pos: [-14, 26, -12] },
+    rim: { color: 0x2fd8ff, i: 0.65 },
+    glow: 0x4ae8ff,
+    food: { color: 0xffd24a, emissive: 0xff9a10, halo: 0xffc060, light: 0xffb030, burst: 0.11 },
+    ambient: { color: 0x9fe8ff, size: 0.24, opacity: 0.8, rise: 0.95, drift: 0.6 },
+    props: g => {
+      const coralA = pmat(0x1f7f8a, 0.7, 0.1, 0x0d4a52, 0.35), tipA = pmat(0x3fd0d8, 0.6, 0.1, 0x1f8f9c, 0.5);
+      const coralB = pmat(0x8a3a6a, 0.72, 0.1, 0x4a1a38, 0.35), tipB = pmat(0xd85aa0, 0.6, 0.1, 0x8a2a60, 0.45);
+      const rock = pmat(0x123844, 0.95);
+      scatter(g, 20, 15, 46, (gg, x, z) => {
+        const warm = Math.random() < 0.5;
+        addCoral(gg, x, z, 2.6 + Math.random() * 2.6, warm ? coralB : coralA, warm ? tipB : tipA);
+      });
+      scatter(g, 12, 15, 44, (gg, x, z) => addRock(gg, x, z, 0.5 + Math.random() * 1.5, rock));
+      scatter(g, 8, 18, 42, (gg, x, z) => {
+        const fan = new THREE.Mesh(new THREE.ConeGeometry(1.1 + Math.random() * 0.9, 0.5, 5), Math.random() < 0.5 ? tipA : tipB);
+        fan.position.set(x, PROP_BASE + 2.2 + Math.random() * 1.2, z);
+        fan.rotation.set(Math.PI / 2 + 0.4, Math.random() * 3, 0);
+        gg.add(fan);
+      });
+    },
+    music: {
+      root: 48, scale: [0, 2, 4, 6, 7, 9, 11], bpm: 68, oct: 0,
+      octOf: (s) => (s % 8 < 4 ? 1 : 0),
+      lead: [0, 2, 4, 6, 3, 1, 2, 4, 5, 3, 1, 0, 2, 4, 6, 3],
+      leadType: 'sine', leadGain: 0.05, leadDur: 1.15, leadCut: 2200,
+      bass: [0, null, null, null, null, null, null, null, 3, null, null, null, null, null, null, null],
+      bassType: 'sine', bassGain: 0.062, bassDur: 3.6,
+      perc: null,
+      noise: { every: 4, dur: 2.8, gain: 0.04, type: 'lowpass', freq: 380, q: 0.7 },
+      delay: 0.6, feedback: 0.45, wet: 0.4, volume: 0.5
+    }
+  }
+];
+
+function clearProps() {
+  propGroup.traverse(o => {
+    if (o.isMesh) {
+      o.geometry.dispose();
+      if (Array.isArray(o.material)) o.material.forEach(m => m.dispose());
+      else o.material.dispose();
+    }
+  });
+  propGroup.clear();
+}
+
+function recolorFood(t) {
+  if (!food.mesh) return;
+  const u = food.mesh.userData;
+  u.core.material.color.setHex(t.food.color);
+  u.core.material.emissive.setHex(t.food.emissive);
+  u.halo.material.color.setHex(t.food.halo);
+  u.ring.material.color.setHex(t.food.halo);
+  u.light.color.setHex(t.food.light);
+}
+
+function applyTheme(t) {
+  curTheme = t;
+
+  scene.background.setHex(t.bg);
+  scene.fog.color.setHex(t.bg);
+  scene.fog.near = t.fog[0];
+  scene.fog.far = t.fog[1];
+
+  // 棋盘地面
+  if (floorTex) floorTex.dispose();
+  floorTex = makeFloorTexture(t);
+  floorMat.map = floorTex;
+  floorMat.emissive.setHex(t.floor.emissive);
+  floorMat.emissiveIntensity = t.floor.emissiveIntensity;
+  floorMat.roughness = t.floor.roughness;
+  floorMat.metalness = t.floor.metalness;
+  floorMat.needsUpdate = true;
+
+  // 地形
+  groundMat.color.setHex(t.groundColor);
+
+  // 水面 / 岩浆面
+  if (t.surface) {
+    if (surfTex) surfTex.dispose();
+    surfTex = makeSurfaceTexture(t);
+    surfaceMat.map = surfTex;
+    surfaceMat.opacity = t.surface.opacity;
+    surfaceMat.emissive.setHex(t.surface.emissive);
+    surfaceMat.emissiveIntensity = t.surface.emissiveIntensity;
+    surfaceMat.roughness = t.surface.roughness;
+    surfaceMat.metalness = t.surface.metalness;
+    surfaceMat.needsUpdate = true;
+    surface.position.y = t.surface.y;
+    surface.visible = true;
+  } else {
+    surface.visible = false;
+  }
+
+  // 底座 / 围墙 / 光柱
+  baseMat.color.setHex(t.base.color);
+  baseMat.emissive.setHex(t.base.emissive);
+  baseMat.emissiveIntensity = t.base.ei;
+  wallMat.color.setHex(t.wall.color);
+  wallMat.emissive.setHex(t.wall.emissive);
+  wallMat.emissiveIntensity = t.wall.ei;
+  wallMat.opacity = t.wall.opacity;
+  cornerMat.color.setHex(t.pillar);
+
+  // 灯光
+  hemiLight.color.setHex(t.hemi.sky);
+  hemiLight.groundColor.setHex(t.hemi.ground);
+  hemiLight.intensity = t.hemi.i;
+  keyLight.color.setHex(t.key.color);
+  keyLight.intensity = t.key.i;
+  keyLight.position.set(t.key.pos[0], t.key.pos[1], t.key.pos[2]);
+  keyLight.shadow.camera.updateProjectionMatrix();
+  rimLight.color.setHex(t.rim.color);
+  rimLight.intensity = t.rim.i;
+  glowLight.color.setHex(t.glow);
+
+  // 食物
+  foodStyle = t.food;
+  recolorFood(t);
+
+  // 道具
+  clearProps();
+  PROP_BASE = t.propBase === undefined ? GROUND_Y : t.propBase;
+  t.props(propGroup);
+
+  setAmbient(t.ambient);
+  musicSetTheme(t);
+
+  const el = $('ui-map');
+  if (el) el.textContent = t.icon + ' ' + t.name;
+}
+
+/** 随机换一张与当前不同的地图 */
+function nextTheme() {
+  let i = themeIndex;
+  while (i === themeIndex) i = (Math.random() * THEMES.length) | 0;
+  themeIndex = i;
+  applyTheme(THEMES[i]);
+  return THEMES[i];
+}
+
+/* ============================================================
+   游戏逻辑
+   ============================================================ */
+
+function resetGame() {
+  snake = [];
+  dir = DIRS.right;
+  pendingDir = null;
+  acc = 0;
+  stepInterval = START_INTERVAL;
+  score = 0;
+  speedLevel = 1;
+  deathShake = 0;
+  bulges.length = 0;
+
+  // 初始 4 节，头在 gx=8，朝右
+  const gz = Math.floor(GRID / 2);
+  const headG = { gx: 8, gz };
+  snake.push({ gx: headG.gx, gz: headG.gz, pgx: headG.gx, pgz: headG.gz });
+  for (let i = 1; i < 4; i++) {
+    snake.push({ gx: headG.gx - i, gz, pgx: headG.gx - i, pgz: gz });
+  }
+
+  headMesh.rotation.set(0, dirYaw(), 0);
+  headMesh.userData.tongue.visible = false;
+  headMesh.userData.tongue.scale.z = 0.02;
+  tongueLife = 0;
+  tongueTimer = 1.0;
+
+  // 每次重开随机换一张地图（背景 + 音乐一起换）
+  const th = nextTheme();
+  buildSnakeBody(1, 0);
+  recolorFood(th);
+
+  placeFood();
+  updateHUD();
+  snapCamera();
+}
+
+function addSegment(gx, gz) {
+  snake.push({ gx, gz, pgx: gx, pgz: gz });
+  // 吃到食物：在颈部生成一个凸起，沿身体向尾部推进（蛇的吞咽效果）
+  bulges.push({ s: 0.35 });
+  if (bulges.length > 4) bulges.shift();
+}
+
+function placeFood() {
+  const occupied = new Set(snake.map(s => s.gx + ',' + s.gz));
+  const free = [];
+  for (let x = 0; x < GRID; x++) {
+    for (let z = 0; z < GRID; z++) {
+      if (!occupied.has(x + ',' + z)) free.push([x, z]);
+    }
+  }
+  const pick = free.length ? free[(Math.random() * free.length) | 0] : [0, 0];
+  food.gx = pick[0];
+  food.gz = pick[1];
+  if (!food.mesh) food.mesh = createFood();
+  food.mesh.position.set(cellX(food.gx), 0.55, cellZ(food.gz));
+  food.mesh.scale.setScalar(1);
+}
+
+function isOpposite(a, b) { return a.x === -b.x && a.z === -b.z; }
+
+/**
+ * 屏幕方向（up/down/left/right）→ 世界方向。
+ * 两种视角都以「屏幕上看到的方位」为准：
+ *  - 上帝视角：屏幕上方 = 世界 -z（与画面一致）
+ *  - 跟随视角：屏幕上方 = 蛇当前前进方向，即 W 继续前进、A/D 左右转向
+ *    （用蛇的朝向而非相机偏航角做基准，避免相机转向滞后造成误判）
+ */
+function dirFromScreen(name) {
+  const sx = name === 'left' ? -1 : name === 'right' ? 1 : 0;
+  const sy = name === 'up' ? -1 : name === 'down' ? 1 : 0;
+  // 转向基准用「已排队的方向」：快速连按两次 A 可以连续左转两次
+  const ref = pendingDir || dir;
+  const y = camMode === 0 ? Math.atan2(ref.x, ref.z) : Math.PI;
+  const cy = Math.cos(y), sn = Math.sin(y);
+  const wx = -sx * cy - sy * sn;
+  const wz = sx * sn - sy * cy;
+  if (Math.abs(wx) >= Math.abs(wz)) return wx >= 0 ? DIRS.right : DIRS.left;
+  return wz >= 0 ? DIRS.down : DIRS.up;
+}
+
+function setDir(name) {
+  const d = dirFromScreen(name);
+  if (!d) return;
+  if (state === 'ready') return;
+  if (isOpposite(d, dir)) return;              // 不能 180° 掉头
+  if (pendingDir && isOpposite(d, pendingDir)) return;
+  pendingDir = d;
+}
+
+function step() {
+  if (pendingDir && !isOpposite(pendingDir, dir)) { dir = pendingDir; pendingDir = null; }
+
+  const head = snake[0];
+  const nx = head.gx + dir.x;
+  const nz = head.gz + dir.z;
+
+  if (nx < 0 || nx >= GRID || nz < 0 || nz >= GRID) { die('撞到墙壁了', '💥', 'HIT THE WALL'); return; }
+
+  const willGrow = (nx === food.gx && nz === food.gz);
+  const limit = willGrow ? snake.length : snake.length - 1;
+  for (let i = 0; i < limit; i++) {
+    if (snake[i].gx === nx && snake[i].gz === nz) { die('咬到自己了', '🌀', 'SELF BITE'); return; }
+  }
+
+  if (willGrow) {
+    const t = snake[snake.length - 1];
+    addSegment(t.gx, t.gz);
+  }
+
+  for (let i = snake.length - 1; i > 0; i--) {
+    const s = snake[i], p = snake[i - 1];
+    s.pgx = s.gx; s.pgz = s.gz;
+    s.gx = p.gx;  s.gz = p.gz;
+  }
+  head.pgx = head.gx; head.pgz = head.gz;
+  head.gx = nx; head.gz = nz;
+
+  if (willGrow) {
+    score += 10;
+    speedLevel = Math.min(12, 1 + Math.floor(score / 50));
+    stepInterval = Math.max(MIN_INTERVAL, START_INTERVAL - (speedLevel - 1) * SPED_UP);
+    burst(cellX(food.gx), 0.6, cellZ(food.gz), 30, foodStyle ? foodStyle.burst : 0.09);
+    beep(620 + Math.min(score, 400) * 1.1, 0.09, 'triangle', 0.07);
+    setTimeout(() => beep(920 + Math.min(score, 400) * 1.4, 0.07, 'sine', 0.045), 55);
+    placeFood();
+    updateHUD();
+  }
+}
+
+function updateHUD() {
+  uiScore.textContent = score;
+  uiBest.textContent = best;
+  uiLen.textContent = snake.length;
+  uiLv.textContent = speedLevel;
+}
+
+function die(reason, emoji, sub) {
+  state = 'over';
+  deathShake = 0.5;
+  flashEl.classList.add('on');
+  requestAnimationFrame(() => requestAnimationFrame(() => flashEl.classList.remove('on')));
+  beep(190, 0.28, 'sawtooth', 0.075);
+  setTimeout(() => beep(120, 0.42, 'sawtooth', 0.06), 110);
+
+  const h = snake[0];
+  burst(cellX(h.gx), 0.6, cellZ(h.gz), 34);
+
+  if (score > best) { best = score; localStorage.setItem('snake3d_best', String(best)); }
+  updateHUD();
+
+  $('over-emoji').textContent = emoji;
+  $('over-reason').textContent = sub + ' · ' + reason;
+  $('over-score').textContent = score;
+  $('over-best').textContent = best;
+  setTimeout(() => { if (state === 'over') ovOver.classList.remove('hidden'); }, 480);
+}
+
+/* ============================================================
+   相机
+   ============================================================ */
+let camYaw = 0;
+let camTargetPos = new THREE.Vector3();
+let camTargetLook = new THREE.Vector3();
+let lookSmooth = new THREE.Vector3(0, 0, 0);
+
+function dirYaw() { return Math.atan2(dir.x, dir.z); }
+
+function angleLerp(a, b, t) {
+  let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI;
+  if (d < -Math.PI) d += Math.PI * 2;
+  return a + d * t;
+}
+
+function headWorldPos(t) {
+  const h = snake[0];
+  if (!h) return new THREE.Vector3();
+  const x = cellX(h.pgx) + (cellX(h.gx) - cellX(h.pgx)) * t;
+  const z = cellZ(h.pgz) + (cellZ(h.gz) - cellZ(h.pgz)) * t;
+  return new THREE.Vector3(x, 0.5, z);
+}
+
+// 上帝视角的相机高度：让棋盘（含边距）纵向刚好装进视野，极窄屏时拉高（上限 44）以保证横向也能看全
+function topDownHeight() {
+  const need = (HALF + 2.2) / Math.tan((camera.fov * Math.PI / 180) / 2);
+  const aspect = camera.aspect || 1;
+  return Math.min(44, Math.max(25.5, need / Math.min(aspect, 1)));
+}
+
+// 上帝视角机位：跟随蛇头，但钳制在"棋盘不出画"的范围内
+function topDownCamTarget(hp, h) {
+  const halfV = h * Math.tan((camera.fov * Math.PI / 180) / 2);
+  const halfH = halfV * (camera.aspect || 1);
+  // 可移动量 = 视野半宽 - 棋盘半宽 - 光带余量；棋盘装得下时锁中心，装不下时跟随蛇头
+  const slack = (s) => Math.max(0, Math.min(s - HALF - 0.6, HALF * 0.35));
+  return {
+    x: THREE.MathUtils.clamp(hp.x, -slack(halfH), slack(halfH)),
+    z: THREE.MathUtils.clamp(hp.z, -slack(halfV), slack(halfV))
+  };
+}
+
+function updateCamera(dt, t) {
+  const hp = headWorldPos(t);
+
+  // 待机状态：镜头缓慢环绕展示
+  if (state === 'ready' || state === 'over') {
+    const tm = performance.now() / 1000;
+    const orbit = state === 'ready' ? 0.16 : 0.05;
+    camTargetPos.set(Math.sin(tm * orbit) * 20, 15.5 + Math.sin(tm * orbit * 1.4) * 1.6, Math.cos(tm * orbit) * 20);
+    camTargetLook.set(0, 0.4, 0);
+    const f = 1 - Math.pow(state === 'ready' ? 0.02 : 0.16, dt);
+    camera.position.lerp(camTargetPos, f);
+    lookSmooth.lerp(camTargetLook, f);
+    camera.lookAt(lookSmooth);
+    return;
+  }
+
+  if (camMode === 0) {
+    camYaw = angleLerp(camYaw, dirYaw(), 1 - Math.pow(0.001, dt));
+    const dist = 8.6, height = 6.6;
+    camTargetPos.set(
+      hp.x - Math.sin(camYaw) * dist,
+      height,
+      hp.z - Math.cos(camYaw) * dist
+    );
+    camTargetLook.set(hp.x + Math.sin(camYaw) * 1.8, 0.55, hp.z + Math.cos(camYaw) * 1.8);
+  } else {
+    // 上帝视角：跟随蛇头的正俯视，相机位置钳制保证棋盘尽量完整留在画面内
+    const h = topDownHeight();
+    const c = topDownCamTarget(hp, h);
+    camTargetPos.set(c.x, h, c.z + 0.001);
+    camTargetLook.set(c.x, 0, c.z);
+  }
+
+  const follow = camMode === 0 ? (1 - Math.pow(0.0008, dt)) : (1 - Math.pow(0.004, dt));
+  camera.position.lerp(camTargetPos, follow);
+  lookSmooth.lerp(camTargetLook, follow);
+
+  if (deathShake > 0) {
+    deathShake = Math.max(0, deathShake - dt);
+    const amp = deathShake * 0.85;
+    camera.position.x += (Math.random() - 0.5) * amp;
+    camera.position.y += (Math.random() - 0.5) * amp;
+    camera.position.z += (Math.random() - 0.5) * amp;
+  }
+
+  camera.lookAt(lookSmooth);
+}
+
+function snapCamera() {
+  // 按当前视角模式一次性就位（开局/重开时避免从上一局的机位飞过来）
+  const hp = headWorldPos(1);
+  if (camMode === 0) {
+    camYaw = dirYaw();
+    camera.position.set(hp.x - Math.sin(camYaw) * 8.6, 6.6, hp.z - Math.cos(camYaw) * 8.6);
+    lookSmooth.set(hp.x + Math.sin(camYaw) * 1.8, 0.55, hp.z + Math.cos(camYaw) * 1.8);
+  } else {
+    const h = topDownHeight();
+    const c = topDownCamTarget(hp, h);
+    camera.position.set(c.x, h, c.z + 0.001);
+    lookSmooth.set(c.x, 0, c.z);
+  }
+  camera.lookAt(lookSmooth);
+}
+
+/* ============================================================
+   渲染同步
+   ============================================================ */
+function renderSnake(t, dt) {
+  buildSnakeBody(t, dt);
+  updateTongue(dt);
+}
+
+/* ============================================================
+   主循环
+   ============================================================ */
+let lastT = performance.now();
+
+function animate(now) {
+  requestAnimationFrame(animate);
+  const dt = Math.min((now - lastT) / 1000, 0.08);
+  lastT = now;
+
+  if (state === 'playing') {
+    acc += dt;
+    let guard = 0;
+    while (acc >= stepInterval && state === 'playing' && guard < 5) {
+      acc -= stepInterval;
+      step();
+      guard++;
+    }
+  }
+
+  const t = state === 'playing' ? Math.min(acc / stepInterval, 1) : 1;
+
+  renderSnake(t, dt);
+  updateParticles(dt);
+  updateAmbient(dt);
+  musicUpdate();
+  updateCamera(dt, t);
+
+  // 水面 / 岩浆缓慢流动
+  if (surface.visible && surfTex) {
+    surfTex.offset.x = (surfTex.offset.x + dt * 0.008) % 1;
+    surfTex.offset.y = (surfTex.offset.y + dt * 0.013) % 1;
+    if (curTheme && curTheme.surface && curTheme.surface.emissiveIntensity > 0.9) {
+      surfaceMat.emissiveIntensity = curTheme.surface.emissiveIntensity * (0.86 + Math.sin(now / 620) * 0.14);
+    }
+  }
+
+  // 食物动效
+  if (food.mesh) {
+    const tm = now / 1000;
+    food.mesh.rotation.y = tm * 1.7;
+    food.mesh.userData.core.rotation.x = tm * 1.1;
+    food.mesh.userData.core.rotation.z = tm * 0.7;
+    food.mesh.userData.core.position.y = Math.sin(tm * 2.6) * 0.12;
+    food.mesh.userData.ring.rotation.z = tm * 0.9;
+    const pulse = 1 + Math.sin(tm * 3.4) * 0.08;
+    food.mesh.userData.ring.scale.setScalar(pulse);
+  }
+
+  // 跟随光
+  const hp = headWorldPos(t);
+  glowLight.position.set(hp.x, 4.2, hp.z);
+
+  renderer.render(scene, camera);
+}
+
+/* ============================================================
+   输入
+   ============================================================ */
+const KEYMAP = {
+  ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
+  w: 'up', s: 'down', a: 'left', d: 'right',
+  W: 'up', S: 'down', A: 'left', D: 'right'
+};
+
+window.addEventListener('keydown', (e) => {
+  if (KEYMAP[e.key]) {
+    e.preventDefault();
+    if (state === 'playing') setDir(KEYMAP[e.key]);
+    return;
+  }
+  if (e.code === 'Space') {
+    e.preventDefault();
+    if (state === 'playing') pauseGame();
+    else if (state === 'paused') resumeGame();
+    return;
+  }
+  if (e.key === 'c' || e.key === 'C') {
+    camMode = (camMode + 1) % 2;
+    toastCamera();
+    return;
+  }
+  if (e.key === 'm' || e.key === 'M') { toggleSound(); return; }
+  if (e.key === 'n' || e.key === 'N') { toggleMusic(); return; }
+  if (e.key === 'r' || e.key === 'R') { startGame(); return; }
+  if (e.key === 'Enter') {
+    if (state === 'over' || state === 'ready') startGame();
+    return;
+  }
+});
+
+const viewNames = ['跟随视角', '上帝视角'];
+// 切视角时顺带提示当前视角下的操作方式，避免"按键没反应"的困惑
+const viewTips = ['W 前进 · A 左转 · D 右转', '方向键 = 屏幕上看到的方位'];
+const hintTexts = [
+  'W 前进 · A 左转 · D 右转 · 空格暂停 · C 切到上帝视角',
+  '方向键 / WASD = 屏幕方向 · 空格暂停 · C 切到跟随视角'
+];
+
+const viewShorts = ['跟随', '上帝'];
+
+function updateHint() {
+  const el = $('hint');
+  if (el) el.textContent = hintTexts[camMode];
+  const v = $('ui-view');
+  if (v) v.textContent = viewShorts[camMode];
+}
+let toastTimer = null;
+function toast(msg) {
+  let el = $('cam-toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'cam-toast';
+    el.style.cssText = 'position:absolute;left:50%;top:78px;transform:translateX(-50%);z-index:12;' +
+      'padding:8px 18px;border-radius:11px;font-size:12.5px;font-weight:700;letter-spacing:.06em;' +
+      'white-space:nowrap;max-width:92vw;overflow:hidden;text-overflow:ellipsis;' +
+      'background:rgba(12,22,38,.82);border:1px solid rgba(67,232,255,.3);color:#8ff2ff;' +
+      'backdrop-filter:blur(12px);pointer-events:none;transition:opacity .3s ease';
+    document.getElementById('app').appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.opacity = '1';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.style.opacity = '0'; }, 1700);
+}
+function toastCamera() {
+  toast(viewNames[camMode] + ' · ' + viewTips[camMode]);
+  updateHint();
+}
+
+// 触摸滑动
+let touchStart = null;
+canvas.addEventListener('touchstart', (e) => {
+  const t0 = e.changedTouches[0];
+  touchStart = { x: t0.clientX, y: t0.clientY, time: Date.now() };
+}, { passive: true });
+
+canvas.addEventListener('touchend', (e) => {
+  if (!touchStart) return;
+  const t1 = e.changedTouches[0];
+  const dx = t1.clientX - touchStart.x;
+  const dy = t1.clientY - touchStart.y;
+  const adx = Math.abs(dx), ady = Math.abs(dy);
+  if (Math.max(adx, ady) > 26) {
+    if (adx > ady) setDir(dx > 0 ? 'right' : 'left');
+    else setDir(dy > 0 ? 'down' : 'up');
+  }
+  touchStart = null;
+}, { passive: true });
+
+document.querySelectorAll('#dpad .d').forEach((el) => {
+  const fire = (ev) => {
+    ev.preventDefault();
+    if (state === 'playing') setDir(el.dataset.dir);
+    else if (state === 'ready') startGame();
+  };
+  el.addEventListener('touchstart', fire, { passive: false });
+  el.addEventListener('mousedown', fire);
+});
+
+if (window.matchMedia('(pointer: coarse)').matches) {
+  document.getElementById('dpad').classList.add('show');
+}
+
+/* ============================================================
+   控制与状态切换
+   ============================================================ */
+function startGame() {
+  ovStart.classList.add('hidden');
+  ovOver.classList.add('hidden');
+  ovPause.classList.add('hidden');
+  resetGame();
+  state = 'playing';
+  if (curTheme) toast('地图 · ' + curTheme.icon + ' ' + curTheme.name);
+  beep(520, 0.09, 'triangle', 0.055);
+  setTimeout(() => beep(780, 0.1, 'triangle', 0.05), 90);
+}
+
+function pauseGame() {
+  if (state !== 'playing') return;
+  state = 'paused';
+  ovPause.classList.remove('hidden');
+}
+
+function resumeGame() {
+  if (state !== 'paused') return;
+  state = 'playing';
+  ovPause.classList.add('hidden');
+  lastT = performance.now();
+}
+
+function toggleSound() {
+  soundOn = !soundOn;
+  localStorage.setItem('snake3d_sound', soundOn ? '1' : '0');
+  $('btn-sound').classList.toggle('off', !soundOn);
+  if (soundOn) beep(700, 0.07, 'sine', 0.05);
+}
+
+$('btn-start').addEventListener('click', startGame);
+$('btn-retry').addEventListener('click', startGame);
+$('btn-resume').addEventListener('click', resumeGame);
+$('btn-pause').addEventListener('click', () => {
+  if (state === 'playing') pauseGame();
+  else if (state === 'paused') resumeGame();
+});
+$('btn-view').addEventListener('click', () => { camMode = (camMode + 1) % 2; toastCamera(); });
+$('btn-sound').addEventListener('click', toggleSound);
+$('btn-sound').classList.toggle('off', !soundOn);
+$('btn-music').addEventListener('click', toggleMusic);
+$('btn-music').classList.toggle('off', !musicOn);
+
+// 失焦自动暂停
+window.addEventListener('blur', () => { if (state === 'playing') pauseGame(); });
+
+// 自适应
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+});
+
+/* ============================================================
+   初始化
+   ============================================================ */
+resetGame();
+state = 'ready';
+updateHUD();
+updateHint();
+
+// 自动化测试/调试钩子
+window.__snake3d = {
+/* ==== ANDROID-BRIDGE-BEGIN ==== */
+  // ---- Android 壳桥接（由 tools/sync-web.mjs 注入，勿手改）----
+  pause() { if (state === 'playing') pauseGame(); return state; },
+  resume() { if (state === 'paused') resumeGame(); return state; },
+  isPlaying() { return state === 'playing'; },
+  // 返回键：游戏中先暂停防手滑退出；其余状态交回系统
+  handleBack() { if (state === 'playing') { pauseGame(); return true; } return false; },
+/* ==== ANDROID-BRIDGE-END ==== */
+  get state() { return state; },
+  get camMode() { return camMode; },
+  get score() { return score; },
+  get len() { return snake.length; },
+  get rings() { return ringCount; },          // 当前身体环数（渲染层调试用）
+  get cells() { return snake.map(s => s.gx + ',' + s.gz).join(' '); },
+  get theme() { return curTheme ? curTheme.id : null; },
+  get themes() { return THEMES.map(t => t.id).join(','); },
+  get musicStep() { return MUSIC.step; },
+  // 调试用：强制切换到指定主题（不影响随机逻辑）
+  map(id) {
+    const i = THEMES.findIndex(t => t.id === id || String(t.id) === String(id));
+    if (i < 0) {
+      const n = Number(id);
+      if (Number.isInteger(n) && n >= 0 && n < THEMES.length) { themeIndex = n; applyTheme(THEMES[n]); return THEMES[n].id; }
+      return null;
+    }
+    themeIndex = i;
+    applyTheme(THEMES[i]);
+    return THEMES[i].id;
+  },
+  // 调试用：直接给蛇加长（沿蛇形路线延伸尾巴，不与自己重叠），便于观察长身体形态
+  grow(n = 10) {
+    const last = snake[snake.length - 1];
+    const prev = snake.length > 1 ? snake[snake.length - 2] : last;
+    let dx = Math.sign(last.gx - prev.gx) || -1;
+    let dz = Math.sign(last.gz - prev.gz) || 0;
+    let gx = last.gx, gz = last.gz;
+    const occ = new Set(snake.map(s => s.gx + ',' + s.gz));
+    for (let i = 0; i < n; i++) {
+      if (gx + dx >= 0 && gx + dx < GRID && gz + dz >= 0 && gz + dz < GRID &&
+          !occ.has((gx + dx) + ',' + (gz + dz))) {
+        gx += dx; gz += dz;
+      } else {
+        const tx = dz, tz = -dx;           // 侧向一格后反向，形成蛇形走位
+        const turn = (ox, oz) => gx + ox >= 0 && gx + ox < GRID && gz + oz >= 0 && gz + oz < GRID &&
+                                !occ.has((gx + ox) + ',' + (gz + oz));
+        if (turn(tx, tz)) { gx += tx; gz += tz; }
+        else if (turn(-tx, -tz)) { gx -= tx; gz -= tz; }
+        else break;
+        dx = -dx; dz = -dz;
+      }
+      occ.add(gx + ',' + gz);
+      snake.push({ gx, gz, pgx: gx, pgz: gz });
+    }
+    return snake.length;
+  }
+};
+// 待机时让镜头先就位
+camera.position.set(0, 15.5, 20);
+lookSmooth.set(0, 0.4, 0);
+camera.lookAt(lookSmooth);
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>
