@@ -36,18 +36,41 @@ jobs:
         with:
           node-version: '22'
 
-      - name: 安装 Android 命令行工具
-        uses: android-actions/setup-android@v3
-
-      - name: 安装 SDK 组件并接受许可
+      # 注意：这里刻意不使用 android-actions/setup-android。
+      # 它默认会安装 legacy 的 `tools` 包，而该包已被 Google 从 SDK 仓库下架，
+      # 会导致 "Failed to find package 'tools'" 直接失败（2026-09 起多发）。
+      # ubuntu runner 镜像本身就预装了 Android SDK，含 android-35 与 build-tools 34/35，够用。
+      - name: 准备 Android SDK
         run: |
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager --install \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0" \
-            "build-tools;34.0.0"
-          # android-35 平台包自身依赖 build-tools;34.0.0，所以两个版本都装
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          echo "SDK = $SDK"
+          echo "ANDROID_HOME=$SDK"     >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+
+          SDKMGR="$(ls -d "$SDK"/cmdline-tools/*/bin 2>/dev/null | head -1)/sdkmanager"
+          if [ -x "$SDKMGR" ]; then
+            echo "$(dirname "$SDKMGR")" >> "$GITHUB_PATH"
+            echo "sdkmanager = $SDKMGR"
+          else
+            echo "::warning::找不到 sdkmanager，若组件齐全则不影响构建"
+          fi
+
+          # 预装齐了就完全不碰网络；缺了才补装（这样 runner 镜像变动时也不会挂）
+          missing=()
+          for p in "platform-tools" "platforms;android-35" "build-tools;35.0.0" "build-tools;34.0.0"; do
+            [ -d "$SDK/${p//;/\/}" ] || missing+=("$p")
+          done
+
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "缺少组件：${missing[*]} → 补装"
+            yes | "$SDKMGR" --licenses > /dev/null 2>&1 || true
+            "$SDKMGR" --install "${missing[@]}"
+          else
+            echo "预装组件齐备（${#missing[@]} 项缺失），跳过安装"
+          fi
+
+          echo "--- platforms ---";   ls "$SDK/platforms"
+          echo "--- build-tools ---"; ls "$SDK/build-tools"
 
       - name: 缓存 Gradle
         uses: actions/cache@v4
