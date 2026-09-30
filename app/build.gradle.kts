@@ -11,8 +11,8 @@ android {
         applicationId = "com.ilses1.snake"
         minSdk = 24          // Android 7.0：覆盖 WebGL2 + Web Audio 的稳妥下限
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
     }
 
     buildFeatures {

@@ -51,6 +51,60 @@ val assetLoader = WebViewAssetLoader.Builder()
 
 注入带 `/* ==== ANDROID-BRIDGE-BEGIN ==== */` 显式标记，**重复运行不会叠加**，且注入后会自动自检。
 
+## 移动端操作适配
+
+手机上没有键盘，所有操作都得靠触摸。这部分逻辑改在主仓库的 `web/index.html` 与
+`tauri-app/ui/index.html`（两份内容除 importmap 一行外完全一致），再由 `sync-web.mjs` 同步进来。
+
+### 操作方式
+
+| 方式 | 说明 |
+| --- | --- |
+| 滑动屏幕 | 任意位置滑动，**够阈值就立刻响应，不等手指抬起**——贪吃蛇对延迟很敏感 |
+| 右下方向键 | 十字布局，点击转向；`ready` 状态下点一下即开始游戏 |
+| 右上角暂停键 | 游戏中暂停（原先只有键盘空格可用，手机上等于没有暂停） |
+
+滑动一个细节：**一次触摸只转向一次**（`touchStart.fired` 标志）。否则手指划过途中会连续
+触发转向，直接把自己撞死。阈值 `SWIPE_MIN = 24px`。
+
+### 方向键的显示判定
+
+三个信号任一成立即显示，避免漏判：
+
+```js
+(navigator.maxTouchPoints || 0) > 0 || matchMedia('(pointer: coarse)').matches || matchMedia('(hover: none)').matches
+```
+
+支持 URL 覆盖：`?touch=1` 强制显示、`?touch=0` 强制隐藏——在桌面浏览器里调移动端布局时用。
+判定成立时会给 `<body>` 挂上 `touch` 类，CSS 据此把「键盘说明」换成「触摸说明」
+（`.kb-only` / `.touch-only`），手机上不再显示 WASD、R、Enter 那套无用文案。
+
+### 布局上踩过的坑
+
+| 问题 | 处理 |
+| --- | --- |
+| 全面屏手势条 / 曲面屏弯折处放按钮会误触 | 方向键边距用 `max(18px, env(safe-area-inset-right))`，顶栏与遮罩层同理 |
+| 横屏（如 667×375）顶栏横向溢出被裁掉 | 桌面尺寸的顶栏实测要约 **800px** 宽才放得下，所以压缩规则用 `max-width: 860px`；只写 `640px` 会在 641~800 之间留空档 |
+| 横屏方向键被 `9vh` 压到 38px，按不准 | 下限由 `clamp(44px, 9vh, 50px)` 兜住——**44px 是触摸目标底线** |
+| 横屏短屏（≈360px 高）开始卡片超出视口，「开始游戏」点不到 | 遮罩层改 `overflow-y:auto`，居中改由 `.card { margin:auto }` 承担（`place-items:center` 在可滚动容器里会裁掉顶部且滚不回去），再配 `max-height:560px` 压缩卡片 |
+| 顶栏 6 个数据格 + 4 个图标在竖屏挤爆 | `max-width:640px` 时收掉「速度 / 视角 / 地图」三格（横屏与桌面仍完整显示） |
+
+### 怎么验证的
+
+`tools/verify-mobile.mjs` 用 CDP 驱动本机 Chrome，真实开启移动端模拟（`mobile` + `dpr=2` + 触摸），
+在 4 个视口下量 `getBoundingClientRect()` 做**数值断言**（不靠肉眼看截图）：
+
+```
+390×844  iPhone 竖屏      800×360  安卓横屏
+360×640  安卓窄竖屏        667×375  小屏横屏
+```
+
+断言内容：无横向溢出、顶栏面板不越界不重叠、方向键尺寸 ≥44px 且不越界、触摸文案正确切换、
+卡片完整可见或遮罩层可滚动、以及**按一下方向键看蛇头是否真的改变航向**（交互链路端到端）。
+
+之所以不用 `agent-browser`：它要现下约 500MB 的 Chromium；Node 22 自带全局 `WebSocket`，
+直接连 CDP 即可，零安装。截图输出在 `.workbuddy/verify-shots/`（已 gitignore）。
+
 ## 工程结构
 
 ```
@@ -73,7 +127,8 @@ snake-android/
 ├── tools/
 │   ├── make-icons.py                    # 从主仓库源图标生成全套安卓图标
 │   ├── sync-web.mjs                     # 同步游戏页面 + 注入桥接
-│   └── check-web-assets.mjs             # 打包前 assets 自检（CI 也跑）
+│   ├── check-web-assets.mjs             # 打包前 assets 自检（CI 也跑）
+│   └── verify-mobile.mjs                # 手机视口布局 + 触摸操作的自动化验证
 ├── .github/workflows/android.yml        # CI：构建 debug APK，打 tag 时发 Release
 ├── build.gradle.kts
 ├── settings.gradle.kts                  # 阿里云镜像优先，回落官方源
@@ -100,15 +155,19 @@ node tools/sync-web.mjs
 python tools/make-icons.py
 
 # 3) 自检 assets：离线依赖、桥接补丁、内联脚本语法
-node tools/check-web-assets.mjs
-# 本机若报「无法启动子进程（EBUSY）」，改用：
-#   node --experimental-vm-modules tools/check-web-assets.mjs
+node --experimental-vm-modules tools/check-web-assets.mjs
+# 不带 --experimental-vm-modules 时会回落到 node --check 子进程；
+# 该回落路径在 Windows 上可能因 EBUSY 起不来，届时会明确报「未能检查（环境限制）」。
 
-# 4) 编译 debug APK
+# 4) 手机视口布局 + 触摸操作验证（需要本机有 Chrome，且本地静态服务已起）
+python -m http.server 8080 --bind 127.0.0.1 --directory app/src/main/assets
+node tools/verify-mobile.mjs http://127.0.0.1:8080/index.html
+
+# 5) 编译 debug APK
 ./gradlew :app:assembleDebug
 # 产物：app/build/outputs/apk/debug/app-debug.apk
 
-# 5) 装到设备
+# 6) 装到设备
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
