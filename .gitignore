@@ -1,0 +1,31 @@
+# Android Studio / IntelliJ
+*.iml
+.idea/
+.gradle/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+build/
+*/build/
+
+# 构建产物
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+output.json
+
+# 签名文件（切勿提交）
+*.jks
+*.keystore
+keystore.properties
+
+# 系统 / 编辑器
+.DS_Store
+Thumbs.db
+.vscode/
+
+# 日志
+*.log
