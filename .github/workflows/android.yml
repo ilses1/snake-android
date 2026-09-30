@@ -108,5 +108,32 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*.apk
-          generate_release_notes: true
           fail_on_unmatched_files: true
+          body: |
+            ## 贪吃蛇 · 安卓端
+
+            包名 `com.ilses1.snake.debug`，与后续正式版可以并存安装。
+
+            ### 安装
+
+            下载下面的 `snake-android-*-debug.apk` 传到手机安装。首次需要在系统弹窗里
+            允许「安装未知来源应用」。
+
+            ### 环境要求
+
+            | 项 | 要求 |
+            | --- | --- |
+            | 系统 | Android 7.0（API 24）及以上 |
+            | WebView | **建议 89 及以上** |
+
+            > **关于 WebView 版本**：游戏用 `importmap` + ES module 加载 Three.js，
+            > WebView 低于 89 会白屏。若打开是白屏，去应用商店升级
+            > 「Android System WebView」或 Chrome 再试。
+
+            ### 关于这个包
+
+            这是 **debug 版**（`android:debuggable=true`），方便用桌面 Chrome 的
+            `chrome://inspect` 直接调试 WebView。未做代码混淆与正式签名，
+            请勿当作正式发行版分发。
+
+            完整改动见 [提交记录](https://github.com/ilses1/snake-android/commits/main)。
